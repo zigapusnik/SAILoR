@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import multiprocessing   
 import numpy as np 
 import os  
-import pickle  
+import pickle   
 
 def main():  
     subfolderProperties = {"DREAM4": {"net_nums": range(1,6), "net_sizes": [10]}} #,"EcoliExtractedNetworks": {"net_nums": range(1,11), "net_sizes": [16]}}     
@@ -72,6 +72,8 @@ def getPaths(net_num, net_size, subfolder):
         path_knockouts = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_knockouts.tsv") 
         path_wildtype = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_wildtype.tsv")   
 
+        binarisedPath = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_binarised.tsv")  
+
         steadyStatesPaths = [path_knockdowns, path_knockouts, path_wildtype]        
         path_gold_standard = os.path.join(".", "data", subfolder, "DREAM4_gold_standards")  
 
@@ -95,10 +97,12 @@ def getPaths(net_num, net_size, subfolder):
             else:
                 goldNetPath = os.path.join(folder_path, f"Ecoli-{i}_goldstandard.tsv")          
     
-    return timeSeriesPaths, steadyStatesPaths, referencePaths, goldNetPath
+        binarisedPath = os.path.join(folder_path, f"Ecoli-{net_num}_dream4_binarised.tsv")     
+
+    return timeSeriesPaths, steadyStatesPaths, referencePaths, goldNetPath, binarisedPath 
 
 def runFramework(net_num, net_size, subfolder, runNum = None, debug = False):   
-    timeSeriesPaths, steadyStatesPaths, referencePaths, goldNetPath = getPaths(net_num, net_size, subfolder) 
+    timeSeriesPaths, steadyStatesPaths, referencePaths, goldNetPath, binarisedPath = getPaths(net_num, net_size, subfolder) 
     scenario = subfolder + "_" + str(net_size) + "_" + str(net_num) 
     if runNum is not None:
         scenario = scenario + "_" + str(runNum) 

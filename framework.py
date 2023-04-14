@@ -1,11 +1,13 @@
 from dynGENIE3 import *
 from deap import creator, base, tools, algorithms
 from sklearn.cluster import KMeans 
+from qm import QuineMcCluskey 
 
 import csv
 import networkx as nx
 import numpy as np 
-import matplotlib.pyplot as plt   
+import matplotlib.pyplot as plt 
+import math    
 import multiprocessing
 import os 
 import pandas as pd 
@@ -31,13 +33,13 @@ class Network:
         self.normalisedTriC = None
         self.prevNormTriC = None     
         self.nxG = None
-        self.prevnxG = None 
+        self.prevnxG = None  
 
         if refFile is not None: 
             self.constructReferenceNetwork(refFile, geneIndices, geneNames)        
 
         if adjM is not None:
-            self.setAdjacencyMatrix(adjM)  
+            self.setAdjacencyMatrix(adjM)   
 
     #set number of nodes
     def setnNodes(self, nNodes):
@@ -65,7 +67,7 @@ class Network:
     def setAdjacencyMatrix(self, adjM):
         self.adjM = adjM
         self.setGraph()   
-        self.setTriadicCensus()  
+        self.setTriadicCensus()    
 
     def setNewAdjacencyMatrix(self, adj):
         self.prevAdjM = self.adjM
@@ -510,7 +512,6 @@ class GeneticSolver:
 
         return sub1, sub2
 
-
 def getGoldNetwork(goldpath, geneIndices, geneNames):
     net = Network(refFile = goldpath, geneIndices = geneIndices, geneNames = geneNames)    
     return net.getAdjacencyMatrix()     
@@ -635,8 +636,21 @@ class NetworkProperties:
         degSum = np.sum(avgRegDegs)   
         return avgRegDegs/degSum     
 
+def semiTensorProduct(a, b): 
+    n = np.shape(a)[1]
+    p = np.shape(b)[0]
+    v = math.lcm(n, p) 
+
+    m_left = np.kron(a, np.identity(v//n))
+    m_right = np.kron(b, np.identity(v//p)) 
+
+    return  np.matmul(m_left, m_right)      
+
 def getDecimalFromBinary(row):
     return int(row, 2)                 
+
+def getBinaryFromDecimal(value, nBits):
+    return [int(i) for i in bin(value)[2:].zfill(nBits)]   
 
 #Main class for context specific inference
 class ContextSpecificDecoder:
@@ -644,9 +658,9 @@ class ContextSpecificDecoder:
     #steadyStatesPaths ... file paths list to steady states data
     #referenceNetPaths ... file paths list to reference networks 
     #maxRegs ... maximum number of regulators   
-    def __init__(self, timeSeriesPaths, steadyStatesPaths=None, referenceNetPaths = None, goldNetPath = None, maxRegs = 10, debug = False, savePath = None):      
+    def __init__(self, timeSeriesPaths, steadyStatesPaths=None, referenceNetPaths = None, goldNetPath = None, binarisedPath = None, maxRegs = 10, debug = False, savePath = None):      
         if isinstance(steadyStatesPaths, list): 
-            if not steadyStatesPaths:
+            if not steadyStatesPaths: 
                 steadyStatesPaths = None  
 
         timeSeriesDf = self.readFiles(timeSeriesPaths)    
@@ -656,10 +670,16 @@ class ContextSpecificDecoder:
         geneNamesList.remove("Time")          
         self.geneIndices = {value: indx for indx, value in enumerate(geneNamesList)} 
         self.geneNames =  {indx: value for indx, value in enumerate(geneNamesList)} 
-        self.goldNetPath = goldNetPath     
-        self.savePath = savePath         
+        self.goldNetPath = goldNetPath          
+        self.savePath = savePath     
 
-        self.steadyStatesDf = None 
+        if binarisedPath is None:
+            tmp_path = timeSeriesPaths[0] 
+            binarisedPath = tmp_path.rsplit(".", 1)[0] + "_binarised.tsv"      
+
+        self.binarisedPath = binarisedPath      
+
+        self.steadyStatesDf = None  
         if steadyStatesPaths is not None:   
             steadyStatesDf = self.readFiles(steadyStatesPaths)   
             self.steadyStatesDf = steadyStatesDf
@@ -675,6 +695,8 @@ class ContextSpecificDecoder:
             plt.bar(np.arange(13), netProperties.avgTriC)       
             plt.show()       
 
+        use_xor = False  
+        self.qm = QuineMcCluskey(use_xor = use_xor)
         self.genSolver = GeneticSolver(netProperties)                     
 
     def test(self, population, fronts, debug = False):   
@@ -708,22 +730,132 @@ class ContextSpecificDecoder:
 
         return distances, metrics, baseMetrics      
 
-    def getDynamicAccuracy(self, bNetwork):
+    #simulates Boolean network based on provided mode  
+    # mode = 0 ... exec and eval (dynamic evaluation of Boolean expressions) 
+    # mode = 1 ... truth table lookup 
+    # mode = 2 ... semi-tensor product      
+    #TO DO ... different modes of simulation - exec and eval, lookup from truth table, semi-tensor product   
+    def simulateBooleanModel(self, bNetwork, initialState, simNum, mode=2):     
+        num_nodes = len(bNetwork)       
+        simulations = np.zeros((simNum, num_nodes), dtype=int)           
+        #set initial state       
+        simulations[0] = initialState       
+        
+        
+        if mode == 0:
+            expressions = {}    
+            for node in bNetwork:
+                target = node[0]
+                bexpr = node[4]  
+                expr = bexpr[bexpr.find("= ")+1:]  
+                expressions[target] = expr  
 
-        return None  
+            #exec and eval to dynamically evaluate Boolean models 
+            for time_stamp in range(1, simNum): 
+                for node in bNetwork:
+                    target = node[0]
+                    exec(self.geneNames[target] + " = " + str(simulations[time_stamp - 1, target]))        
 
-    def tesBooleanNetworks(self, bNetworks): 
-        dynAcc = self.getDynamicAccuracy(bNetworks[0]) 
-        best = bNetworks[0]  
+                for node in bNetwork:
+                    target = node[0]  
+                    exp = expressions[target]   
+                    simulations[time_stamp, target] = int(eval(exp)) 
+
+        elif mode == 1:  
+            for time_stamp in range(1, simNum): 
+                for node in bNetwork:
+                    target = node[0]
+                    regulators = node[1]  
+                    tT = node[5]     
+
+                    if len(regulators) > 0:  
+                        ind = getDecimalFromBinary(''.join(map(str, list(simulations[time_stamp-1, regulators]))))            
+                    else:
+                        ind = 0 
+                    simulations[time_stamp, target] = tT.iloc[ind]["value"] 
+
+          
+        elif mode == 2:
+            #TO DO
+            #semi-tensor product 
+            """
+            simulations = None    
+            print("Calculating with semi-tensor product") 
+            #vector representation of states, i.e. 1 = [1 0]^T, 0 = [0 1]^T   
+            initialStateVectorized = np.array([initialState, initialState]) 
+            initialStateVectorized[1] = initialStateVectorized[1] - 1
+            previousStateVectorized = np.abs(initialStateVectorized)  
+            currentStateVectorized = np.zeros((2, num_nodes))    
+
+            Tts = {}    
+            for node in bNetwork:
+                target = node[0] 
+                tT = node[5] 
+                tT = tT[["value", "neg_value"]].to_numpy().transpose()     
+                Tts[target] = tT        
+
+            for time_stamp in range(1, simNum): 
+                for node in bNetwork:  
+                    target = node[0]   
+                    regulators = node[1]    
+                    tT = Tts[target]
+                    print("Printing truth table") 
+                    print(tT) 
+                    print("Printing regulator values") 
+                    print(previousStateVectorized[:,regulators])  
+                    print(semiTensorProduct(tT, previousStateVectorized[:,regulators])) 
+                    currentStateVectorized[:,target] = semiTensorProduct(tT, previousStateVectorized[:,regulators]) 
+                    simulations2[time_stamp, target] = currentStateVectorized[1,target]
+                previousStateVectorized = currentStateVectorized   
+
+            print(simulations2) 
+            print(simulations - simulations2) 
+            """ 
+            
+        return  simulations              
+
+    #returns dynamic accuraccy based on training time series data 
+    #bNetwork ... list of nodes
+    #bNetwork[i] ... [target, regulators, generalised truth table, boolean function, boolean expression, truth table]  
+    def getDynamicAccuracy(self, bNetwork, bin_df, shift_bin_df, experiments_df): 
+
+        #simulate Boolean model for each experiment  
+        for experiment in range(self.experiments): 
+            sel = experiments_df["Experiment"] == experiment 
+            bin_df_exp = bin_df[sel]   
+            simNum = len(bin_df_exp.index) - 1     
+            initialState = bin_df_exp.iloc[0,:]                       
+
+            simulations = self.simulateBooleanModel(bNetwork, list(initialState), simNum)                                 
+
+            """
+            for node in bNetwork: 
+                target = node[0] 
+                regulators = node[1]  
+                gT = node[2]    
+
+                reg_shift_df = shift_bin_df.iloc[:,regulators]      
+                target_df = bin_df.iloc[:,target] 
+            """  
+
+        return None   
+
+    #returns Boolean function that most matches training data       
+    #bNetworks ... list of Boolean networks 
+    #bin_df, shift_bin_df, experiments_df   
+    def testBooleanNetworks(self, bNetworks, bin_df, shift_bin_df, experiments_df):   
+        bestAcc = self.getDynamicAccuracy(bNetworks[0], bin_df, shift_bin_df, experiments_df)    
+        bestNetwork = bNetworks[0]  
         #iterate through every network except first  
         for bNetwork in bNetworks[1:]:
-            myAcc = self.getDynamicAccuracy(bNetworks[0]) 
-            if myAcc > dynAcc:
-                best = bNetwork
-        return best    
+            myAcc = self.getDynamicAccuracy(bNetwork, bin_df, shift_bin_df, experiments_df)         
+            if myAcc > bestAcc:
+                bestAcc =  myAcc  
+                bestNetwork = bNetwork      
+        return bestNetwork               
     
-    def get_generalised_truth_table(self, target, regulators, bin_df, shift_bin_df, experiments_df):  
-        bin_reg_shift_df = shift_bin_df.iloc[:,regulators]    
+    def getGeneralisedTruthTable(self, target, regulators, bin_df, shift_bin_df, experiments_df):  
+        reg_shift_df = shift_bin_df.iloc[:,regulators]    
         target_df = bin_df.iloc[:,target]     
         numReg = len(regulators)       
         numRows = pow(2, numReg)         
@@ -731,16 +863,16 @@ class ContextSpecificDecoder:
 
         gT = pd.DataFrame(rowValues, columns = ["inputVector"])
         #create zero columns for T and F  
-        gT["T"] = 0       
-        gT["F"] = 0         
+        gT["T"] = 0          
+        gT["F"] = 0              
 
         for experiment in range(self.experiments):
             sel = experiments_df["Experiment"] == experiment
-            df_shift_exp = bin_reg_shift_df[sel] 
-            target_df_exp = target_df[sel]
+            df_shift_exp = reg_shift_df[sel]     
+            target_df_exper = target_df[sel]
 
-            selT = target_df_exp == 1       
-            selF = target_df_exp == 0    
+            selT = target_df_exper == 1         
+            selF = target_df_exper == 0          
 
             #exclude first time point   
             selT.iloc[0] = False  
@@ -755,53 +887,90 @@ class ContextSpecificDecoder:
             countsTrue = vectorsTrue.value_counts()          
             countsFalse = vectorsFalse.value_counts()  
 
-            print(vectorsTrue)  
-            print(vectorsFalse)
-
-            print("Printing counts")  
-            print(countsTrue) 
-            print(countsFalse)
-
-            print("Printing generalised table") 
-            print(gT)
-
-            #for vector, value in       
             trueIndices = countsTrue.index.values 
-            falseIndices = countsFalse.index.values    
+            falseIndices = countsFalse.index.values     
 
             gT.loc[trueIndices, "T"] = gT.loc[trueIndices,"T"] + countsTrue 
-            gT.loc[falseIndices, "F"] = gT.loc[falseIndices,"F"] + countsFalse    
+            gT.loc[falseIndices, "F"] = gT.loc[falseIndices,"F"] + countsFalse      
 
-            print(gT)      
-            
-        return gT            
+        return gT               
+
+    def getExpression(self, bfun, target, regulators):
+        expr = self.geneNames[target] + " = "
+
+        if bfun is None:
+            return expr + "0" 
+
+        regulator_names = [self.geneNames[regulator] for regulator in regulators]        
+        expressions = []
+        #epi ... essential prime implicant   
+        for epi in bfun: 
+            #list of regulators names, "" for    
+            epi_expr = [regulator_names[i] if c != '-' else "" for i, c in enumerate(epi)]
+            epi_expr = ["not " + epi_expr[i] if c == '0' else epi_expr[i] for i, c in enumerate(epi)] 
+            epi_expr = list(filter(lambda c: c != "", epi_expr))     
+
+            if len(epi_expr) == 0: 
+                epi_expr = "1"   
+
+            expressions.append(" and ".join(epi_expr))          
+        return expr + " or ".join(expressions)         
+
+    #returns truth table based on Boolean expression  
+    def getTruthTable(self, bexpr, regulators):  
+        numReg = len(regulators)        
+        numRows = pow(2, numReg)          
+        rowValues = list(range(numRows))    
+        regNames = [self.geneNames[regulator] for regulator in regulators]
+
+        tT = pd.DataFrame(rowValues, columns = ["inputVector"])  
+        tT["value"] = 0
+        tT["neg_value"] = 1     
+
+        expr = bexpr[bexpr.find("= ")+1:]   
+
+        if len(regulators != 0): 
+            for row in rowValues:  
+                #set regulators value 
+                regVals = getBinaryFromDecimal(row, numReg)    
+                for regName, regValue in zip(regNames, regVals):
+                    exec(regName + " = " + str(regValue)) 
+                value =  int(eval(expr))
+                tT.loc[row, "value"] = value 
+                tT.loc[row, "neg_value"] = abs(1- value)  
+
+        else:   
+            tT["value"] = int(eval(expr))          
+        return tT    
 
     def inferBooleanNetwork(self, adjM, nNodes, bin_df, shift_bin_df, experiments_df):    
+        b_functions = [] 
         for target in range(nNodes):        
-            regulators = np.argwhere(adjM[:,target] == 1).ravel()   
+            bfun = None 
+            regulators = np.argwhere(adjM[:,target] == 1).ravel()       
 
             if regulators.size != 0: 
-                gT =  self.get_generalised_truth_table(target, regulators, bin_df, shift_bin_df, experiments_df)    
+                gT =  self.getGeneralisedTruthTable(target, regulators, bin_df, shift_bin_df, experiments_df)
+                minterms = list(gT[gT["T"] > gT["F"]]["inputVector"])   
+                dont_cares = list(gT[gT["T"] == gT["F"]]["inputVector"])     
+                if len(minterms) != 0 or len(dont_cares) != 0:   
+                    bfun = self.qm.simplify(minterms, dont_cares, num_bits=len(regulators))   
             else:  
-                print(f"No regulators found for {self.geneNames[target]}")           
+                print(f"No regulators found for {self.geneNames[target]}")             
 
-        return None                  
+            bexpr = self.getExpression(bfun, target, regulators)  
+            tT = self.getTruthTable(bexpr, regulators)  
 
-    def inferBooleanNetworks(self, subjects, binarised_df): 
+            b_fun = (target, regulators, gT, bfun, bexpr, tT)            
+            b_functions.append(b_fun)        
 
-        columns = binarised_df.columns.tolist()   
-        columns.remove("Time")
-        columns.remove("Experiment")   
-        
-        experiments_df = binarised_df[["Time", "Experiment"]]   
-        bin_df = binarised_df[columns] 
-        #since shifting appends nan values ints are converted to floats   
-        shift_bin_df = bin_df.shift(periods = 1).fillna(0).astype(int)     
-        shift_bin_df = shift_bin_df.astype(str)  
+        return b_functions                            
 
-        #list of boolean networks       
+    def inferBooleanNetworks(self, subjects, bin_df, shift_bin_df, experiments_df):  
+        #list of boolean networks        
         bNetworks = []   
         for subject in subjects:
+            print("Inferring Boolean network") 
             adjM = subject.adjM
             nNodes = subject.nNodes 
             bNetwork = self.inferBooleanNetwork(adjM, nNodes, bin_df, shift_bin_df, experiments_df)    
@@ -834,15 +1003,38 @@ class ContextSpecificDecoder:
     def getNetworkCandidates(self, debug=False):  
         return self.genSolver.run()       
 
-    def run(self, debug=False): 
-        population, fronts = self.getNetworkCandidates()         
-        #binarise time series data    
-        binarised_df = self.binarise(self.timeSeriesDf)       
-        #get Boolean networks from population   
-        bNetworks = self.inferBooleanNetworks(population, binarised_df)        
-        #select best network         
-        best = self.tesBooleanNetworks(bNetworks) 
-        return best      
+    def run(self, debug=False):   
+        population, fronts = self.getNetworkCandidates() 
+        print("Number of networks in first Pareto front")   
+        print(len(fronts[0]))  
+
+        binarisedPath = self.binarisedPath  
+        if os.path.exists(binarisedPath): 
+            #if binarised file exists read from file   
+            binarised_df = pd.read_csv(binarisedPath, sep="\t") 
+        else:
+            #else binarise time series data and save       
+            binarised_df = self.binarise(self.timeSeriesDf)   
+            binarised_df.to_csv(binarisedPath, index=False, sep="\t")       
+
+        #get Boolean networks from population    
+        columns = binarised_df.columns.tolist()   
+        columns.remove("Time")
+        columns.remove("Experiment")   
+
+        experiments_df = binarised_df[["Time", "Experiment"]]   
+        bin_df = binarised_df[columns] 
+        #since shifting appends nan values ints are converted to floats   
+        shift_bin_df = bin_df.shift(periods = 1).fillna(0).astype(int)     
+        shift_bin_df = shift_bin_df.astype(str)  
+
+        #bNetworks ... list of Boolean networks
+        ##bNetwork[i] ... [target, regulators, generalised truth table, boolean function, boolean expression, truth table]  
+        bNetworks = self.inferBooleanNetworks(fronts[0], bin_df, shift_bin_df, experiments_df)        
+
+        #select best network          
+        best = self.testBooleanNetworks(bNetworks, bin_df, shift_bin_df, experiments_df)      
+        return best       
 
     def readFiles(self, filePaths):
         df_all = pd.DataFrame() 
