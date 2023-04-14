@@ -11,6 +11,20 @@ def semiTensorProduct(a, b):
 
     return  np.matmul(m_left, m_right)  
 
+#calculate semi tensor product for Boolean expressions  
+def getBooleanBySemiTensorProduct(mf, X): 
+    value = mf 
+    
+    numCols = np.shape(mf)[1]   
+    numRegs = np.shape(X)[1]
+    #calculate semi tensor product for each variable in b 
+    for i in range(numRegs): 
+        numCols = numCols//2 
+        b0 = X[0,i] 
+        b1 = X[1,i] 
+        value = value[:,:numCols]*b0 + value[:,numCols:]*b1         
+    return value   
+
 
 m_not = np.matrix([[0, 1],[1, 0]])
 m_or = np.matrix([[1, 1, 1, 0],[0, 0, 0, 1]]) 
@@ -35,9 +49,9 @@ mf = semiTensorProduct(mf, (np.kron(i_4, m_reduce_power)))
 
 print(mf) 
  
-x1 = np.matrix([[0], [1]])
-x2 = np.matrix([[0], [1]])
-x3 = np.matrix([[0], [1]])  
+x1 = np.matrix([[1], [0]])
+x2 = np.matrix([[1], [0]])
+x3 = np.matrix([[1], [0]])    
 
 X = np.hstack((x1,x2,x3))  
 print(X)   
@@ -51,4 +65,6 @@ c = semiTensorProduct(b, x3)
 print(c) 
 
 
-print(semiTensorProduct(mf, X))   
+#print(semiTensorProduct(mf, X))  
+
+print(getBooleanBySemiTensorProduct(mf, X)) 

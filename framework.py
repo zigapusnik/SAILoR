@@ -636,15 +636,19 @@ class NetworkProperties:
         degSum = np.sum(avgRegDegs)   
         return avgRegDegs/degSum     
 
-def semiTensorProduct(a, b): 
-    n = np.shape(a)[1]
-    p = np.shape(b)[0]
-    v = math.lcm(n, p) 
-
-    m_left = np.kron(a, np.identity(v//n))
-    m_right = np.kron(b, np.identity(v//p)) 
-
-    return  np.matmul(m_left, m_right)      
+#calculate semi tensor product for Boolean expressions  
+def getBooleanBySemiTensorProduct(mf, X): 
+    value = mf 
+    
+    numCols = np.shape(mf)[1]   
+    numRegs = np.shape(X)[1]
+    #calculate semi tensor product for each variable in b 
+    for i in range(numRegs): 
+        numCols = numCols//2 
+        b0 = X[0,i] 
+        b1 = X[1,i] 
+        value = value[:,:numCols]*b0 + value[:,numCols:]*b1         
+    return value   
 
 def getDecimalFromBinary(row):
     return int(row, 2)                 
@@ -741,7 +745,7 @@ class ContextSpecificDecoder:
         #set initial state       
         simulations[0] = initialState       
         
-        
+        """ 
         if mode == 0:
             expressions = {}    
             for node in bNetwork:
@@ -762,57 +766,56 @@ class ContextSpecificDecoder:
                     simulations[time_stamp, target] = int(eval(exp)) 
 
         elif mode == 1:  
-            for time_stamp in range(1, simNum): 
-                for node in bNetwork:
-                    target = node[0]
-                    regulators = node[1]  
-                    tT = node[5]     
-
-                    if len(regulators) > 0:  
-                        ind = getDecimalFromBinary(''.join(map(str, list(simulations[time_stamp-1, regulators]))))            
-                    else:
-                        ind = 0 
-                    simulations[time_stamp, target] = tT.iloc[ind]["value"] 
-
-          
-        elif mode == 2:
-            #TO DO
-            #semi-tensor product 
-            """
-            simulations = None    
-            print("Calculating with semi-tensor product") 
-            #vector representation of states, i.e. 1 = [1 0]^T, 0 = [0 1]^T   
-            initialStateVectorized = np.array([initialState, initialState]) 
-            initialStateVectorized[1] = initialStateVectorized[1] - 1
-            previousStateVectorized = np.abs(initialStateVectorized)  
-            currentStateVectorized = np.zeros((2, num_nodes))    
-
-            Tts = {}    
+         """ 
+        for time_stamp in range(1, simNum): 
             for node in bNetwork:
-                target = node[0] 
-                tT = node[5] 
-                tT = tT[["value", "neg_value"]].to_numpy().transpose()     
-                Tts[target] = tT        
+                target = node[0]
+                regulators = node[1]  
+                tT = node[5]     
 
-            for time_stamp in range(1, simNum): 
-                for node in bNetwork:  
-                    target = node[0]   
-                    regulators = node[1]    
-                    tT = Tts[target]
-                    print("Printing truth table") 
-                    print(tT) 
-                    print("Printing regulator values") 
-                    print(previousStateVectorized[:,regulators])  
-                    print(semiTensorProduct(tT, previousStateVectorized[:,regulators])) 
-                    currentStateVectorized[:,target] = semiTensorProduct(tT, previousStateVectorized[:,regulators]) 
-                    simulations2[time_stamp, target] = currentStateVectorized[1,target]
-                previousStateVectorized = currentStateVectorized   
+                if len(regulators) > 0:  
+                    ind = getDecimalFromBinary(''.join(map(str, list(simulations[time_stamp-1, regulators]))))            
+                else:
+                    ind = 0 
+                simulations[time_stamp, target] = tT.iloc[ind]["value"] 
 
-            print(simulations2) 
-            print(simulations - simulations2) 
-            """ 
+       
+        #elif mode == 2:
+        #TO DO
+        #semi-tensor product 
+        simulations2 = np.zeros((simNum, num_nodes), dtype=int)           
+        #set initial state       
+        simulations2[0] = initialState            
+
+        print("Calculating with semi-tensor product") 
+        #vector representation of states, i.e. 1 = [1 0]^T, 0 = [0 1]^T   
+        initialStateVectorized = np.array([initialState, initialState]) 
+        initialStateVectorized[1] = initialStateVectorized[1] - 1
+        previousStateVectorized = np.abs(initialStateVectorized)  
+        currentStateVectorized = np.zeros((2, num_nodes))    
+
+        Tts = {}    
+        for node in bNetwork:
+            target = node[0] 
+            tT = node[5] 
+            #vectorize truth table, transpose it and flip columns 
+            tT = np.flip(tT[["value", "neg_value"]].to_numpy().transpose(), axis=1)        
+            Tts[target] = tT        
+
+        for time_stamp in range(1, simNum): 
+            for node in bNetwork:  
+                target = node[0]   
+                regulators = node[1]     
+                tT = Tts[target]      
+                currentStateVectorized[:,target]  = getBooleanBySemiTensorProduct(tT, previousStateVectorized[:,regulators])[:,0]  
+                simulations2[time_stamp, target] = currentStateVectorized[0,target]      
+            previousStateVectorized = currentStateVectorized          
+
+        print(simulations)
+        print(simulations2)     
+        print(simulations - simulations2)        
             
-        return  simulations              
+        return  simulations               
 
     #returns dynamic accuraccy based on training time series data 
     #bNetwork ... list of nodes
@@ -945,8 +948,9 @@ class ContextSpecificDecoder:
 
     def inferBooleanNetwork(self, adjM, nNodes, bin_df, shift_bin_df, experiments_df):    
         b_functions = [] 
-        for target in range(nNodes):        
-            bfun = None 
+        for target in range(nNodes):  
+            gT = None        
+            bfun = None  
             regulators = np.argwhere(adjM[:,target] == 1).ravel()       
 
             if regulators.size != 0: 
