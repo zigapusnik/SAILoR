@@ -1,7 +1,8 @@
 from dynGENIE3 import *
 from deap import creator, base, tools, algorithms
-from sklearn.cluster import KMeans 
-from qm import QuineMcCluskey 
+from inferelator import inferelator_workflow 
+from sklearn.cluster import KMeans  
+from qm import QuineMcCluskey  
 
 import csv
 import networkx as nx
@@ -11,6 +12,7 @@ import math
 import multiprocessing
 import os 
 import pandas as pd 
+import pickle 
 import sklearn.metrics as metrics 
 import sys  
 import time      
@@ -96,6 +98,7 @@ class Network:
     def getAdjacencyMatrix(self):
         return self.adjM 
     
+    #returns distribution of number of regulators 
     def getRegDegs(self, maxRegs):
         regDegs = np.zeros(maxRegs + 1)
         if self.adjM is not None:
@@ -107,8 +110,22 @@ class Network:
 
         totalRegs = np.sum(regDegs)
         regDegs = regDegs/totalRegs  
-        return regDegs
+        return regDegs   
     
+    def getRegulatesDegs(self, maxRegulates):
+        regulatesDegs = np.zeros(maxRegulates + 1) 
+        if self.adjM is not None: 
+            regulatesNums = np.sum(self.adjM, axis=1).astype(int)       
+            regulatesNums[regulatesNums > maxRegulates] = maxRegulates 
+
+            for regulatesNum in regulatesNums:
+                regulatesDegs[regulatesNum] += 1
+
+        totalRegulates = np.sum(regulatesDegs)
+        regulatesDegs = regulatesDegs/totalRegulates  
+        return regulatesDegs     
+
+    #returns edge probability between two nodes 
     def getEdgeProb(self): 
         return np.sum(self.adjM)/(self.nNodes*self.nNodes)       
     
@@ -170,20 +187,27 @@ class GeneticSolver:
     #mutP ... mutation probability - defined as a ratio of expected changes in adjacency matrix      
     #indP ... independent probability of flipping an edge 
     #networkProperties ... network properties extracted from reference networks, expression data and user defined 
-    def __init__(self, networkProperties, nGen=10, nSub=500, cxP=0.25, mutP=0.25, indP=0.01):   
-        self.nGen = nGen
-        self.nSub = nSub
-        self.cxP = cxP
-        self.mutP = mutP           
-        self.indP = indP      
-        self.plotParetoPerGeneration = False     
-        self.plotPopulationPerGeneration = False              
+    def __init__(self, networkProperties, nGen=10, nSub=1000, cxP=1, mutP=1):                       
+        self.nGen = nGen    
+        self.nSub = nSub  
+        self.cxP = cxP  
+        self.mutP = mutP                    
+        self.plotParetoPerGeneration = False        
+        self.plotPopulationPerGeneration = False                           
         
         self.netProperties = networkProperties   
         self.nNodes = self.netProperties.nNodes  
-        self.mutM = np.ones((self.nNodes, self.nNodes), dtype=int)*self.indP    
 
-        self.initialPop = 0 #[2,3,4]                                        
+        #self.p1 = indP
+        #x = self.netProperties.expEdgeProb  
+        #self.p2 = x*self.p1/(1 - x)   
+        
+        #print(self.netProperties.expEdgeProb)  
+        #print(self.p1)
+        #print(self.p2)  
+
+        self.initialPop = 3 # [3,5] #[2,3,4,5]   
+        self.initialPopProb = [0.9, 0.1]                                                                                   
         #self.initialPop ... modes of generating initial population    
         #0 ... random (equal probability for ede/non-edge)
         #1 ... random (by folowing distribution of number of regulators)
@@ -192,14 +216,14 @@ class GeneticSolver:
         #4 ... based on reg. weights and given threshold, if threshold is not given use dynamic threshold   
         #5 ... based on top k ranked regulations, k is obtained from expected number of edges  
         #6 ... extracted from reference networks
-        #list of modes ... each subject is generated with randomly selected mode  
+        #list of modes ... each subject is generated with randomly selected mode   
          
                  
         #create multiobjective fitness to maximize objective (1) and minimize it (-1) 
         creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))      
         creator.create("Individual", Network, fitness=creator.FitnessMulti)    
 
-        toolbox = base.Toolbox()  
+        toolbox = base.Toolbox()    
         toolbox.register("individual", self.generate_subject)
         toolbox.register("population", self.generate_population)
         toolbox.register("evaluate", self.eval_subject)  
@@ -216,7 +240,10 @@ class GeneticSolver:
         
     def run(self, debug = False):   
         #generate initial population 
-        population = self.toolbox.population()        
+        population = self.toolbox.population()
+
+        print("Number of unique subjects: " + str(len(getUniqueSubjects(population))))  
+
         #evaluate initial population 
         fitnesses = self.toolbox.map(self.toolbox.evaluate, population)  
         for ind, fit in zip(population, fitnesses):
@@ -229,10 +256,10 @@ class GeneticSolver:
             if self.plotPopulationPerGeneration:
                 scatterPlotSubjects(population)      
 
-            offspring = algorithms.varAnd(population, self.toolbox, cxpb=self.cxP, mutpb = self.mutP)     
-            population.extend(offspring) #union of population and offspring       
+            offspring = algorithms.varAnd(population, self.toolbox, cxpb=self.cxP, mutpb = self.mutP)       
+            population.extend(offspring) #union of population and offspring         
 
-            # Evaluate subjects with an invalid fitness
+            # Evaluate subjects with an invalid fitness 
             invalid_sub = [sub for sub in population if not sub.fitness.valid] 
             fitnesses = self.toolbox.map(self.toolbox.evaluate, invalid_sub)
             for ind, fit in zip(invalid_sub, fitnesses):
@@ -253,13 +280,14 @@ class GeneticSolver:
 
             #Tournament selection based on dominance (D) between two individuals
             #If the two individuals do not interdominate the selection is made based on crowding distance (CD)  
-            population = self.toolbox.select(population, self.nSub)           
+            population = self.toolbox.select(population, self.nSub)   
+            print("Number of unique subjects: " + str(len(getUniqueSubjects(population))))           
 
             if self.plotParetoPerGeneration:
                 fronts = self.toolbox.sortNondominated(population, self.nSub, first_front_only = True) 
                 paretoFront = fronts[0] 
                 scatterPlotSubjects(paretoFront)   
-            end = time.time() 
+            end = time.time()  
             elapsed = end - start 
             print(f"Generation: {elapsed} seconds elapsed")  
         start = time.time()  
@@ -269,12 +297,13 @@ class GeneticSolver:
         if debug:        
             print(f"Sorting individuals into nondominated levels: {elapsed} seconds elapsed") 
         #scatterPlotSubjects(fronts[0])        
-        return population, fronts     
+        return fronts      
 
     def eval_subject(self, subject, debug = False):  
         netProperties = self.netProperties  
         regWeights = netProperties.regWeights   
-        avgRegDegs = netProperties.avgRegDegs 
+        avgRegDegs = netProperties.avgRegDegs
+        avgRegulatesDegs = netProperties.avgRegulatesDegs      
         expEdgeProb = netProperties.expEdgeProb 
         avgTriC = netProperties.avgTriC   
         maxRegs = netProperties.maxRegs 
@@ -293,7 +322,7 @@ class GeneticSolver:
             print(f"Number of regulations: {len(regulations)}") 
             print(f"Number of non-regulations: {len(nonRegulations)}")   
 
-        
+        """
         if regulations == 0 or nonRegulations == 0:
             obj1 = 1      
         else:
@@ -301,13 +330,13 @@ class GeneticSolver:
             obj1 = np.sum(1 - regWeights[indcs1])/regulations + np.sum(regWeights[indcs0])/nonRegulations                                
         
         """
+
         sumN = regulations*(regulations + 1)/2 
         sumK = nonRegulations*(regulations + nCon + 1)/2    
         rankedList = [rankedDictionary[(a,b)] for (a,b) in zip(indcs1[0], indcs1[1])]   
         nonRankedList = [rankedDictionary[(a,b)] for (a,b) in zip(indcs0[0], indcs0[1])]   
         obj1 = sum(rankedList)/sumN - sum(nonRankedList)/sumK    
-        """
-
+      
         """
         if obj1 < 1:
             print(obj1)  
@@ -320,20 +349,25 @@ class GeneticSolver:
         #obj1 = -np.sum(np.log(regWeights[indcs1])) - np.sum(np.log(1- regWeights[indcs0]))                
 
         obj2 = 0
+
+        regulatesDegDist = subject.getRegulatesDegs(maxRegs)  
+        regulatesDegCost = np.abs(avgRegulatesDegs - regulatesDegDist)
+        regulatesDegCost = np.sum(regulatesDegCost) 
+        obj2 = obj2 + regulatesDegCost           
+
         regDegDist = subject.getRegDegs(maxRegs)    
         regDegCost = np.abs(avgRegDegs - regDegDist)
-        regDegCost = np.sum(regDegCost)/len(regDegDist) 
-        obj2 = obj2 + regDegCost      
+        regDegCost = np.sum(regDegCost)   
+        obj2 = obj2 + regDegCost       
 
-        eProb = subject.getEdgeProb() 
-        eProbCost = np.abs(expEdgeProb - eProb)
-        obj2 = obj2 + eProbCost         
+        #eProb = subject.getEdgeProb() 
+        #eProbCost = np.abs(expEdgeProb - eProb)
+        #obj2 = obj2 + eProbCost          
        
-        
         triC = subject.getNormalisedTriadicCensus()  
         triCost = np.abs(avgTriC - triC)
-        triCost = np.sum(triCost)/len(triC) 
-        obj2 = obj2 + triCost       
+        triCost = np.sum(triCost) 
+        obj2 = obj2 + triCost         
         
         if debug:
             print("Triadic census of individual:")
@@ -393,7 +427,7 @@ class GeneticSolver:
         regWeights = netProperties.regWeights 
      
         if threshold is None: 
-            threshold = 2/self.nNodes
+            threshold = 1.5/self.nNodes  
 
         return (regWeights >= threshold).astype(int)     
     
@@ -421,10 +455,12 @@ class GeneticSolver:
     #generate adjacency matrix based on reference networks 
     #TO DO ... generate adjacency matrix based on matched gene names  
     def generateRefNetsAdj(self):
+        netProperties = self.netProperties
+
         #select random reference network as base 
-        numNets = len(self.refNets)  
+        numNets = len(netProperties.referenceNets)  
         indx = np.random.choice(numNets, 1)[0]     
-        refNet = self.refNets[indx]    
+        refNet = netProperties.referenceNets[indx]     
         adjRef = refNet.getAdjacencyMatrix().copy() 
         nNodesRef = (adjRef.shape)[0]      
 
@@ -434,7 +470,7 @@ class GeneticSolver:
             if pad_size % 2 == 1:
                 pad_size = (int(pad_size/2), int(pad_size/2) + 1)
             else: 
-                pad_size = int(pad_size/2)   
+                pad_size = int(pad_size/2)       
 
             adjRef = np.pad(adjRef)   
 
@@ -449,7 +485,7 @@ class GeneticSolver:
 
     def generateInitialAdjMatrix(self, mode):
         if mode == 0:
-            return self.generateRandomAdj()
+            return self.generateRandomAdj() 
         elif mode == 1:
             return self.generateRandomRegDistAdj() 
         elif mode == 2:
@@ -471,7 +507,7 @@ class GeneticSolver:
         mode = self.initialPop      
 
         if isinstance(mode, list): 
-            mode = np.random.choice(mode)   
+            mode = np.random.choice(mode, p = self.initialPopProb)    
 
         ind = creator.Individual(Network()) 
         ind.setnNodes(self.nNodes) 
@@ -480,32 +516,68 @@ class GeneticSolver:
         return ind   
 
     #mutate subject by addition or deletion of edges  
-    def mutation(self, sub):
-        rndVals = np.random.rand(self.nNodes, self.nNodes)
+    def mutation(self, sub):   
+        adjM = sub.getAdjacencyMatrix()         
+
+        #add edge or remove edge with same probability 
+        add_edge = True
+        rnd = np.random.rand() 
+        if rnd < 0.5:
+            add_edge = False  
+
+        indices = np.where(adjM == int(not add_edge))  
+        ind_num = np.random.choice(len(indices[0]))            
+        row = indices[0][ind_num]  
+        column = indices[1][ind_num]   
+
+        adjM[row, column] = int(add_edge) 
+
+        #limit number of regulators   
+        maxRegs = self.netProperties.maxRegs   
+        if np.sum(adjM[:, column]) > maxRegs: 
+            adjM[row, column] = 0      
+
+        
+        """ 
+        #flip bits in adjacency matrix with predefined probability
         mutationMatrix = (rndVals < self.mutM).astype(int)     
         newAdjM = np.absolute(sub.getAdjacencyMatrix() - mutationMatrix) 
-        sub.setNewAdjacencyMatrix(newAdjM)      
+        """
+
+        """
+        #flip ones in ajdacency matrix with probability p1 and zeros with probability p2 to approximately preserve number of edges  
+        rndVals = np.random.rand(self.nNodes, self.nNodes)
+        adjM = sub.getAdjacencyMatrix()  
+
+        indOnes = np.where(adjM == 1)   
+        indZeros = np.where(adjM == 0)   
+
+        adjM[indOnes] = (rndVals[indOnes] > self.p1).astype(int)         
+        adjM[indZeros] = (rndVals[indZeros] < self.p2).astype(int)    
+        """   
+        
+        sub.setNewAdjacencyMatrix(adjM)       
         return sub,  
     
-    #apply a crossover by swaping adjacency matrix rows (regulons) and columns (regulators)   
-    def crossover(self, sub1, sub2):
-        maxSize = self.nNodes - 1  
-        cxNum1 = np.random.randint(1, maxSize)        
-        cxNum2 = np.random.randint(1, maxSize) 
+    #apply a crossover by swaping columns (regulators) in adjacency matrix #and rows    
+    def crossover(self, sub1, sub2):   
+        nNodes = self.nNodes    
+        #cxNum1 = np.random.randint(1, nNodes)          
+        cxNum2 = np.random.randint(1, nNodes)    
 
-        crossRows = np.random.choice(self.nNodes, cxNum1, replace=False) 
-        crossColumns = np.random.choice(self.nNodes, cxNum2, replace=False) 
+        #crossRows = np.random.choice(nNodes, cxNum1, replace=False) 
+        crossColumns = np.random.choice(nNodes, cxNum2, replace=False)      
 
-        adjSub1 = sub1.getAdjacencyMatrix().copy()  
-        adjSub2 = sub2.getAdjacencyMatrix().copy()  
+        adjSub1 = sub1.getAdjacencyMatrix()    
+        adjSub2 = sub2.getAdjacencyMatrix()   
 
-        tmpRows = adjSub1[crossRows, :]
-        adjSub1[crossRows, :] = adjSub2[crossRows, :]
-        adjSub2[crossRows, :] = tmpRows
+        #tmpRows = adjSub1[crossRows, :]
+        #adjSub1[crossRows, :] = adjSub2[crossRows, :]
+        #adjSub2[crossRows, :] = tmpRows 
 
         tmpCols = adjSub1[:, crossColumns] 
-        adjSub1[:, crossColumns] = adjSub2[:, crossColumns]     
-        adjSub2[:, crossColumns] = tmpCols
+        adjSub1[:, crossColumns] = adjSub2[:, crossColumns]        
+        adjSub2[:, crossColumns] = tmpCols  
 
         sub1.setNewAdjacencyMatrix(adjSub1)
         sub2.setNewAdjacencyMatrix(adjSub2)    
@@ -514,7 +586,7 @@ class GeneticSolver:
 
 def getGoldNetwork(goldpath, geneIndices, geneNames):
     net = Network(refFile = goldpath, geneIndices = geneIndices, geneNames = geneNames)    
-    return net.getAdjacencyMatrix()     
+    return net       
 
 #calculate metrices for given adjacency matrices	
 def getMetrics(y_true, y_pred):    
@@ -524,8 +596,8 @@ def getMetrics(y_true, y_pred):
     TNR = TN/(TN + FP)          
 
     precision = TP/(TP + FP)  
-    f1 = 2*(precision*TPR)/(precision + TPR)   
-    accuracy = (TP+TN)/(TP+TN+FP+FN)             
+    f1 = 2*(precision*TPR)/(precision + TPR)     
+    accuracy = (TP+TN)/(TP+TN+FP+FN)              
     bm = TPR + TNR - 1.     
     mcc = (TN*TP - FN*FP)/(np.sqrt((TP + FP)*(TP + FN)*(TN + FP)*(TN + FN)))   
 
@@ -590,7 +662,8 @@ class NetworkProperties:
         self.geneIndices = geneIndices    
         self.geneNames = geneNames   
         self.maxRegs = maxRegs 
-        self.avgRegDegs = self.getAvgRegDegs()      
+        self.avgRegDegs = self.getAvgRegDegs()     
+        self.avgRegulatesDegs = self.getAvgRegulatesDegs()   
         self.expEdgeProb = self.getExpectedEdgeProbability()   
         self.avgTriC = self.getAvgTriadicCensus()      
         
@@ -604,7 +677,7 @@ class NetworkProperties:
         self.rankedDictionary = dict(rankedTuple)         
 
     def getRankedList(self):
-        regWeights = self.regWeights
+        regWeights = self.regWeights 
         #negate array to sort descending   
         indices = np.argsort(-regWeights, axis = None) 
         indices = np.unravel_index(indices, regWeights.shape) 
@@ -634,7 +707,15 @@ class NetworkProperties:
              avgRegDegs = avgRegDegs + refNet.getRegDegs(self.maxRegs) 
 
         degSum = np.sum(avgRegDegs)   
-        return avgRegDegs/degSum     
+        return avgRegDegs/degSum  
+
+    def getAvgRegulatesDegs(self):   
+        avgRegulatesDegs = np.zeros(self.maxRegs + 1)
+        for refNet in self.referenceNets:
+             avgRegulatesDegs = avgRegulatesDegs + refNet.getRegulatesDegs(self.maxRegs)   
+
+        degSum = np.sum(avgRegulatesDegs)   
+        return avgRegulatesDegs/degSum   
 
 #calculate semi tensor product for Boolean expressions  
 def getBooleanBySemiTensorProduct(mf, X): 
@@ -656,17 +737,32 @@ def getDecimalFromBinary(row):
 def getBinaryFromDecimal(value, nBits):
     return [int(i) for i in bin(value)[2:].zfill(nBits)]   
 
+def getUniqueSubjects(subjects):
+    unique_subjects = [] 
+    unique_subjects_set = set()  
+
+    for subject in subjects:
+        adj = subject.getAdjacencyMatrix() 
+        adj_byte_array = adj.tobytes() 
+
+        if adj_byte_array not in unique_subjects_set:
+            unique_subjects.append(subject)
+            unique_subjects_set.add(adj_byte_array)
+
+    return unique_subjects
+
 #Main class for context specific inference
 class ContextSpecificDecoder:
     #timeSeriesPaths   ... file paths list to time series data
     #steadyStatesPaths ... file paths list to steady states data
     #referenceNetPaths ... file paths list to reference networks 
     #maxRegs ... maximum number of regulators   
-    def __init__(self, timeSeriesPaths, steadyStatesPaths=None, referenceNetPaths = None, goldNetPath = None, binarisedPath = None, maxRegs = 10, debug = False, savePath = None):      
-        if isinstance(steadyStatesPaths, list): 
-            if not steadyStatesPaths: 
-                steadyStatesPaths = None  
+    def __init__(self, timeSeriesPaths, steadyStatesPaths=None, referenceNetPaths = None, goldNetPath = None, binarisedPath = None, savePath = None, maxRegs = 10, debug = False):      
+        if isinstance(steadyStatesPaths, list):  
+            if not steadyStatesPaths:  
+                steadyStatesPaths = None   
 
+        self.timeSeriesPaths = timeSeriesPaths 
         timeSeriesDf = self.readFiles(timeSeriesPaths)    
         self.timeSeriesDf = timeSeriesDf 
         nNodes = len(self.timeSeriesDf.columns) - 1
@@ -685,15 +781,32 @@ class ContextSpecificDecoder:
 
         self.steadyStatesDf = None  
         if steadyStatesPaths is not None:   
+            self.steadyStatesPaths = steadyStatesPaths   
             steadyStatesDf = self.readFiles(steadyStatesPaths)   
             self.steadyStatesDf = steadyStatesDf
             if nNodes != len(self.steadyStatesDf.columns):
                 sys.exit("Error: Gene number mismatch between time series and steady states!")
         
         method_args = {}
-        regWeights = self.getRegulatoryWeights(**method_args)    
+        
+        tmp_path = timeSeriesPaths[0] 
+        weights_path = tmp_path.rsplit(".", 1)[0] + "_weights.pkl"   
+
+        regWeights = self.getRegulatoryWeights(**method_args) 
+
+        """
+        if not os.path.exists(weights_path):  
+            regWeights = self.getRegulatoryWeights(**method_args)     
+            with open(weights_path, "wb") as file:      
+                pickle.dump(regWeights, file)      
+        else:            
+            with open(weights_path, "rb") as file:      
+                regWeights = pickle.load(file)         
+        """
+
         referenceNets = self.getReferenceNetworks(referenceNetPaths)             
         netProperties = NetworkProperties(referenceNets, regWeights, nNodes, self.geneIndices, self.geneNames, maxRegs = maxRegs)      
+        self.netProperties = netProperties 
 
         if debug:
             plt.bar(np.arange(13), netProperties.avgTriC)       
@@ -703,36 +816,60 @@ class ContextSpecificDecoder:
         self.qm = QuineMcCluskey(use_xor = use_xor)
         self.genSolver = GeneticSolver(netProperties)                     
 
-    def test(self, population, fronts, debug = False):   
+    def test(self, subjects, debug = False):   
         
         start = time.time()   
-        gold_standard = getGoldNetwork(self.goldNetPath, self.geneIndices, self.geneNames)        
+        gold_standard = getGoldNetwork(self.goldNetPath, self.geneIndices, self.geneNames)    
+        gold_standard_adj = gold_standard.getAdjacencyMatrix() 
+
+
         end = time.time()
         elapsed = end - start 
         if debug:
-            print(f"Extracting gold standard network: {elapsed} seconds elapsed!")  
-
-        #scatterPlotSubjects(fronts[0], savePath = self.savePath)       
+            print(f"Extracting gold standard network: {elapsed} seconds elapsed!")    
 
         start = time.time()  
-        metrics = getMetricsList(fronts[0], gold_standard) 
+        metrics = getMetricsList(subjects, gold_standard_adj) 
         end = time.time()  
         elapsed = end - start
         if debug: 
-            print(f"Calculating metrics for subjects: {elapsed} seconds elapsed!")           
-        #labels = np.arange(len(pareto))               
+            print(f"Calculating metrics for subjects: {elapsed} seconds elapsed!")             
 
         start = time.time()     
-        distances = getDistances(fronts[0])   
+        distances = getDistances(subjects)    
         end = time.time()  
         elapsed = end - start 
         if debug:
             print(f"Calculating distances: {elapsed} seconds elapsed!")   
 
         baseAdj = self.genSolver.generateTopRegulationsAdj(stochasticEdgeNumber = False)      
-        baseMetrics = getMetrics(gold_standard.ravel(), baseAdj.ravel())         
+        baseMetrics = getMetrics(gold_standard_adj.ravel(), baseAdj.ravel())           
 
-        return distances, metrics, baseMetrics      
+        baseNetwork = Network(nNodes = baseAdj.shape[0], adjM = baseAdj)   
+        
+        print("Regulates degrees") 
+        print(gold_standard.getRegulatesDegs(self.netProperties.maxRegs))  
+        print(baseNetwork.getRegulatesDegs(self.netProperties.maxRegs))    
+        print(self.netProperties.avgRegulatesDegs)   
+
+        print("Regulatory degrees") 
+        print(gold_standard.getRegDegs(self.netProperties.maxRegs))  
+        print(baseNetwork.getRegDegs(self.netProperties.maxRegs))    
+        print(self.netProperties.avgRegDegs)  
+
+        print("Triadic census") 
+        print(gold_standard.getNormalisedTriadicCensus())    
+        print(baseNetwork.getNormalisedTriadicCensus())       
+        print(self.netProperties.avgTriC)      
+
+        print("Edge probability")    
+        print(gold_standard.getEdgeProb())    
+        print(baseNetwork.getEdgeProb())       
+        print(self.netProperties.expEdgeProb)  
+
+        print(baseNetwork.getAdjacencyMatrix())         
+
+        return distances, metrics, baseMetrics          
 
     #simulates Boolean network based on provided mode  
     # mode = 0 ... exec and eval (dynamic evaluation of Boolean expressions) 
@@ -745,7 +882,7 @@ class ContextSpecificDecoder:
         #set initial state       
         simulations[0] = initialState       
         
-        """ 
+        #exec and eval
         if mode == 0:
             expressions = {}    
             for node in bNetwork:
@@ -765,97 +902,86 @@ class ContextSpecificDecoder:
                     exp = expressions[target]   
                     simulations[time_stamp, target] = int(eval(exp)) 
 
+        #truth table lookup
         elif mode == 1:  
-         """ 
-        for time_stamp in range(1, simNum): 
+            for time_stamp in range(1, simNum): 
+                for node in bNetwork:
+                    target = node[0]
+                    regulators = node[1]  
+                    tT = node[5]     
+
+                    if len(regulators) > 0:  
+                        ind = getDecimalFromBinary(''.join(map(str, list(simulations[time_stamp-1, regulators]))))            
+                    else:
+                        ind = 0 
+                    simulations[time_stamp, target] = tT.iloc[ind]["value"] 
+
+        #semi-tensor product  
+        elif mode == 2:
+            #vector representation of states, i.e. 1 = [1 0]^T, 0 = [0 1]^T   
+            initialStateVectorized = np.array([initialState, initialState]) 
+            initialStateVectorized[1] = initialStateVectorized[1] - 1
+            previousStateVectorized = np.abs(initialStateVectorized)  
+            currentStateVectorized = np.zeros((2, num_nodes))      
+
+            Tts = {}    
             for node in bNetwork:
-                target = node[0]
-                regulators = node[1]  
-                tT = node[5]     
+                target = node[0] 
+                tT = node[5] 
+                #vectorize truth table, transpose it and flip columns 
+                tT = np.flip(tT[["value", "neg_value"]].to_numpy().transpose(), axis=1)        
+                Tts[target] = tT        
 
-                if len(regulators) > 0:  
-                    ind = getDecimalFromBinary(''.join(map(str, list(simulations[time_stamp-1, regulators]))))            
-                else:
-                    ind = 0 
-                simulations[time_stamp, target] = tT.iloc[ind]["value"] 
-
-       
-        #elif mode == 2:
-        #TO DO
-        #semi-tensor product 
-        simulations2 = np.zeros((simNum, num_nodes), dtype=int)           
-        #set initial state       
-        simulations2[0] = initialState            
-
-        print("Calculating with semi-tensor product") 
-        #vector representation of states, i.e. 1 = [1 0]^T, 0 = [0 1]^T   
-        initialStateVectorized = np.array([initialState, initialState]) 
-        initialStateVectorized[1] = initialStateVectorized[1] - 1
-        previousStateVectorized = np.abs(initialStateVectorized)  
-        currentStateVectorized = np.zeros((2, num_nodes))    
-
-        Tts = {}    
-        for node in bNetwork:
-            target = node[0] 
-            tT = node[5] 
-            #vectorize truth table, transpose it and flip columns 
-            tT = np.flip(tT[["value", "neg_value"]].to_numpy().transpose(), axis=1)        
-            Tts[target] = tT        
-
-        for time_stamp in range(1, simNum): 
-            for node in bNetwork:  
-                target = node[0]   
-                regulators = node[1]     
-                tT = Tts[target]      
-                currentStateVectorized[:,target]  = getBooleanBySemiTensorProduct(tT, previousStateVectorized[:,regulators])[:,0]  
-                simulations2[time_stamp, target] = currentStateVectorized[0,target]      
-            previousStateVectorized = currentStateVectorized          
-
-        print(simulations)
-        print(simulations2)     
-        print(simulations - simulations2)        
+            for time_stamp in range(1, simNum):  
+                for node in bNetwork:  
+                    target = node[0]   
+                    regulators = node[1]     
+                    tT = Tts[target]      
+                    currentStateVectorized[:,target]  = getBooleanBySemiTensorProduct(tT, previousStateVectorized[:,regulators])[:,0]  
+                    simulations[time_stamp, target] = currentStateVectorized[0,target]      
+                previousStateVectorized = currentStateVectorized          
             
         return  simulations               
 
     #returns dynamic accuraccy based on training time series data 
     #bNetwork ... list of nodes
     #bNetwork[i] ... [target, regulators, generalised truth table, boolean function, boolean expression, truth table]  
-    def getDynamicAccuracy(self, bNetwork, bin_df, shift_bin_df, experiments_df): 
+    def getDynamicAccuracy(self, bNetwork, bin_df, experiments_df): 
+        total_errors = 0
+        timeSteps = 0
 
+        numNodes = bin_df.shape[1] 
         #simulate Boolean model for each experiment  
         for experiment in range(self.experiments): 
             sel = experiments_df["Experiment"] == experiment 
             bin_df_exp = bin_df[sel]   
-            simNum = len(bin_df_exp.index) - 1     
-            initialState = bin_df_exp.iloc[0,:]                       
+            simNum = len(bin_df_exp.index)     
+            initialState = bin_df_exp.iloc[0,:]    
 
-            simulations = self.simulateBooleanModel(bNetwork, list(initialState), simNum)                                 
+            bin_df_exp = bin_df_exp.to_numpy()                     
+            simulation = self.simulateBooleanModel(bNetwork, list(initialState), simNum)                                 
 
-            """
-            for node in bNetwork: 
-                target = node[0] 
-                regulators = node[1]  
-                gT = node[2]    
+            errors = np.absolute(simulation - bin_df_exp).sum()   
+            total_errors = total_errors + errors  
+            timeSteps = timeSteps + simNum - 1 #exclude first time point    
 
-                reg_shift_df = shift_bin_df.iloc[:,regulators]      
-                target_df = bin_df.iloc[:,target] 
-            """  
+        #return dynamic accuracy
+        return 1 -  total_errors/(timeSteps*numNodes)        
 
-        return None   
-
-    #returns Boolean function that most matches training data       
-    #bNetworks ... list of Boolean networks 
-    #bin_df, shift_bin_df, experiments_df   
-    def testBooleanNetworks(self, bNetworks, bin_df, shift_bin_df, experiments_df):   
-        bestAcc = self.getDynamicAccuracy(bNetworks[0], bin_df, shift_bin_df, experiments_df)    
-        bestNetwork = bNetworks[0]  
+    #returns Boolean model that best matches training data         
+    #bNetworks ... list of Boolean networks   
+    #bin_df, shift_bin_df, experiments_df    
+    def getBestBooleanModel(self, bNetworks, bin_df, shift_bin_df, experiments_df):     
+        bestAcc = self.getDynamicAccuracy(bNetworks[0], bin_df, experiments_df)     
+        bestNetwork = bNetworks[0]   
         #iterate through every network except first  
-        for bNetwork in bNetworks[1:]:
-            myAcc = self.getDynamicAccuracy(bNetwork, bin_df, shift_bin_df, experiments_df)         
+        for bNetwork in bNetworks[1:]:  
+            myAcc = self.getDynamicAccuracy(bNetwork, bin_df, experiments_df)   
+            print(bestAcc)          
             if myAcc > bestAcc:
-                bestAcc =  myAcc  
+                bestAcc =  myAcc   
                 bestNetwork = bNetwork      
-        return bestNetwork               
+        return bestNetwork                  
     
     def getGeneralisedTruthTable(self, target, regulators, bin_df, shift_bin_df, experiments_df):  
         reg_shift_df = shift_bin_df.iloc[:,regulators]    
@@ -959,8 +1085,10 @@ class ContextSpecificDecoder:
                 dont_cares = list(gT[gT["T"] == gT["F"]]["inputVector"])     
                 if len(minterms) != 0 or len(dont_cares) != 0:   
                     bfun = self.qm.simplify(minterms, dont_cares, num_bits=len(regulators))   
+            """
             else:  
                 print(f"No regulators found for {self.geneNames[target]}")             
+            """
 
             bexpr = self.getExpression(bfun, target, regulators)  
             tT = self.getTruthTable(bexpr, regulators)  
@@ -973,8 +1101,11 @@ class ContextSpecificDecoder:
     def inferBooleanNetworks(self, subjects, bin_df, shift_bin_df, experiments_df):  
         #list of boolean networks        
         bNetworks = []   
+        i = 0
         for subject in subjects:
-            print("Inferring Boolean network") 
+            i = i + 1
+            print(i) 
+            #print("Inferring Boolean network") 
             adjM = subject.adjM
             nNodes = subject.nNodes 
             bNetwork = self.inferBooleanNetwork(adjM, nNodes, bin_df, shift_bin_df, experiments_df)    
@@ -1008,9 +1139,14 @@ class ContextSpecificDecoder:
         return self.genSolver.run()       
 
     def run(self, debug=False):   
-        population, fronts = self.getNetworkCandidates() 
+        fronts = self.getNetworkCandidates() 
         print("Number of networks in first Pareto front")   
         print(len(fronts[0]))  
+
+        #get unique subjects  
+        front = getUniqueSubjects(fronts[0])   
+        print("Number of unique networks in first Pareto front") 
+        print(len(front)) 
 
         binarisedPath = self.binarisedPath  
         if os.path.exists(binarisedPath): 
@@ -1034,11 +1170,11 @@ class ContextSpecificDecoder:
 
         #bNetworks ... list of Boolean networks
         ##bNetwork[i] ... [target, regulators, generalised truth table, boolean function, boolean expression, truth table]  
-        bNetworks = self.inferBooleanNetworks(fronts[0], bin_df, shift_bin_df, experiments_df)        
+        bNetworks = self.inferBooleanNetworks(front, bin_df, shift_bin_df, experiments_df)         
 
         #select best network          
-        best = self.testBooleanNetworks(bNetworks, bin_df, shift_bin_df, experiments_df)      
-        return best       
+        best = self.getBestBooleanModel(bNetworks, bin_df, shift_bin_df, experiments_df)      
+        return best        
 
     def readFiles(self, filePaths):
         df_all = pd.DataFrame() 
@@ -1061,8 +1197,8 @@ class ContextSpecificDecoder:
         return reference_nets    
 
     #infer putative regulatory probability estimates 
-    def getRegulatoryWeights(self, method="dynGENIE3", **method_args):
-        supportedMethods = ["dynGENIE3"]
+    def getRegulatoryWeights(self, method="inferelator", **method_args):
+        supportedMethods = ["dynGENIE3", "inferelator"]  
 
         #set experiment count
         self.timeSeriesDf["Experiment"] = 0  
@@ -1078,10 +1214,13 @@ class ContextSpecificDecoder:
         
         if method == "dynGENIE3":
             return self.run_dynGENIE3(**method_args)   
+        elif method == "inferelator": 
+            return self.run_inferelator(**method_args)   
 
-    #TS_data ... list of time series experiments as numpy arrays
-    #time_points ... list of time points as one dimensional numpy arrays 
+    #runs dynGENIE3
     def run_dynGENIE3(self, **method_args):
+        #TS_data ... list of time series experiments as numpy arrays
+        #time_points ... list of time points as one dimensional numpy arrays 
         TS_data = []  
         time_points = []      
         
@@ -1102,8 +1241,85 @@ class ContextSpecificDecoder:
 
         #probabilites are normalised column-wise   
         regulatory_probs, _, _, _, _ = dynGENIE3(TS_data, time_points, **method_args) 
+        print(regulatory_probs) 
         return regulatory_probs   
     
+    def run_inferelator(self, **method_args): 
+        worker = inferelator_workflow(regression="bbsr", workflow="tfa")         
+        worker.set_run_parameters(num_bootstraps=5, random_seed=42) 
+
+        #self.timeSeriesDf 
+        #time series paths  
+        expression_matrix_file = self.timeSeriesPaths[0].rsplit(".", 1)[0] + "_inferelator_expression_matrix_file.tsv"
+        metadata_file = self.timeSeriesPaths[0].rsplit(".", 1)[0] + "_inferelator_metadata.tsv" 
+        tf_names_file = self.timeSeriesPaths[0].rsplit(".", 1)[0] + "_tf_names.tsv"     
+
+        #if expression matrix file and metadata file does not exists generate file 
+        #if not os.path.exists(expression_matrix_file): 
+        df = self.timeSeriesDf  
+        columns = list(df.columns)    
+        columns.remove("Time")  
+        columns.remove("Experiment")
+        df = df[columns] 
+        time_series_df = self.timeSeriesDf[["Time", "Experiment"]] 
+        time_series_shift_df = time_series_df.shift(periods=1) 
+        time_series_shift_down_df = time_series_df.shift(periods=-1)   
+
+
+        tf_names = list(self.geneIndices.keys()) 
+        tf_names_df = pd.DataFrame({"tf_names": tf_names}) 
+
+        print(time_series_df)  
+
+        if self.steadyStatesPaths is not None:   
+            df = pd.concat([df, self.steadyStatesDf])              
+
+        rowNumAll = len(df.index) 
+        rowNumTimeSeries = len(time_series_df.index)   
+
+        df.insert(0, "cond", ['"' + str(el) + '"' for el in range(rowNumAll)])      
+
+        df_metadata =  pd.DataFrame({"isTs": [False]*rowNumAll, "is1stLast":["NA"]*rowNumAll, "prevCol":["NA"]*rowNumAll, "del.t":[np.nan]*rowNumAll, "condName":['"' + str(el) + '"' for el in range(rowNumAll)]})   
+        df_metadata.loc[0:rowNumTimeSeries-1, "isTs"] = True      
+        
+        print(df_metadata)
+
+        print(time_series_df["Time"] - time_series_shift_df["Time"])   
+        df_metadata.loc[0:rowNumTimeSeries-1, "del.t"] = time_series_df["Time"] - time_series_shift_df["Time"] 
+        
+        boolList = list(time_series_df["Experiment"] > time_series_shift_df["Experiment"]) 
+        boolList[0] = True  
+        boolList.extend([False]*(rowNumAll - rowNumTimeSeries)) 
+        df_metadata.loc[boolList, "is1stLast"] = "f"        
+        #df_metadata.loc[df_metadata["del.t"] < 0, "is1stLast"] = "l"  
+        df_metadata.loc[df_metadata["del.t"] > 0, "is1stLast"] = "m"  
+        boolList = list(time_series_df["Experiment"] < time_series_shift_down_df["Experiment"]) 
+        boolList[-1] = True 
+        boolList.extend([False]*(rowNumAll - rowNumTimeSeries)) 
+        df_metadata.loc[boolList, "is1stLast"] = "l"              
+
+        df_metadata.loc[df_metadata["del.t"] < 0, "del.t"] = "NA"   
+
+        df_metadata.loc[0:rowNumTimeSeries-1, "prevCol"] = ['"' + str(el) + '"' for el in range(-1, rowNumTimeSeries - 1)]            
+        df_metadata.loc[df_metadata["is1stLast"] == "f", "prevCol"] = "NA"     
+        df_metadata.fillna("NA", inplace=True)   
+
+        df.to_csv(expression_matrix_file, sep="\t", index=False)       
+        tf_names_df.to_csv(tf_names_file, sep="\t", index=False, header=None,  quotechar='"', quoting=csv.QUOTE_ALL)   
+        df_metadata.to_csv(metadata_file, sep="\t", index= False, quotechar='"')           
+
+        worker.set_network_data_flags(use_no_gold_standard=True, use_no_prior=True)         
+        worker.set_file_paths(input_dir=".", 
+                      output_dir="./output_inferelator",
+                      expression_matrix_file=expression_matrix_file, 
+                      tf_names_file = tf_names_file,       
+                      meta_data_file=metadata_file)       
+        
+        network_result = worker.run()    
+        print(network_result)   
+
+
+
 
 
 
