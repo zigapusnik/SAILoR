@@ -3,26 +3,26 @@ from deap import creator, base, tools, algorithms
 import framework
 import matplotlib 
 import matplotlib.pyplot as plt 
-import multiprocessing   
+#import multiprocessing   
 import numpy as np 
-import os  
-import pickle   
+import os   
+import pickle     
 
 def main():  
-    subfolder = "DREAM4" # "EcoliExtractedNetworks"              
-    net_nums = [1] #range(1,11)          
-    net_size = 10 #32 #64 #10 #100                   
+    subfolder = "EcoliExtractedNetworks" #"EcoliExtractedNetworks" #"DREAM4"               
+    net_nums = [2] #range(1,11)            
+    net_size = 32 #16 #32 #64 #10 #100                       
     
-    imprvs = {}              
-    dstcs = {}               
-    mtrcs = {}    
-    base = {}          
+    imprvs = {}                  
+    dstcs = {}                  
+    mtrcs = {}         
+    base = {}              
 
     for net_num in net_nums:
         dstcs[net_num] = []   
-        mtrcs[net_num] = []
-        base[net_num]  = []  
-        imprvs[net_num] = []        
+        mtrcs[net_num] = [] 
+        base[net_num]  = []   
+        imprvs[net_num] = []          
 
         scenario = subfolder + "_" + str(net_size) + "_" + str(net_num)   
         
@@ -41,12 +41,11 @@ def main():
 
     folder = os.path.join(".", "results", subfolder + "_" + str(net_size))       
 
-    #create directory if does not exists    
-    #if not os.path.exists(folder): 
-    #    os.makedirs(folder)   
-    #with open(os.path.join(folder, "dump_results.pkl"), "wb") as file:      
-    #    pickle.dump((dstcs, mtrcs, base, imprvs), file)        
-
+    #create directory if does not exists     
+    #if not os.path.exists(folder):  
+    #    os.makedirs(folder)    
+    #with open(os.path.join(folder, "dump_results.pkl"), "wb") as file:       
+    #    pickle.dump((dstcs, mtrcs, base, imprvs), file)           
 
 def getPaths(net_num, net_size, subfolder):     
     steadyStatesPaths = [] 
@@ -58,13 +57,14 @@ def getPaths(net_num, net_size, subfolder):
         timeSeriesPaths = [os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_timeseries.tsv")]
 
 
-        path_knockdowns = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_knockdowns.tsv") 
-        path_knockouts = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_knockouts.tsv") 
-        path_wildtype = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_wildtype.tsv")   
+        #path_knockdowns = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_knockdowns.tsv") 
+        #path_knockouts = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_knockouts.tsv") 
+        #path_wildtype = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_wildtype.tsv")   
 
         binarisedPath = os.path.join(folder_path, f"insilico_size{net_size}_{net_num}_binarised.tsv")  
 
-        steadyStatesPaths = [path_knockdowns, path_knockouts, path_wildtype]        
+        steadyStatesPaths = [] 
+        #steadyStatesPaths = [path_knockdowns, path_knockouts, path_wildtype]        
         path_gold_standard = os.path.join(".", "data", subfolder, "DREAM4_gold_standards")  
 
         #exclude network 1
@@ -91,11 +91,12 @@ def getPaths(net_num, net_size, subfolder):
 
     return timeSeriesPaths, steadyStatesPaths, referencePaths, goldNetPath, binarisedPath 
 
-def runFramework(net_num, net_size, subfolder, savePath = None, debug = True):      
+def runFramework(net_num, net_size, subfolder, savePath = None, debug = True):          
     timeSeriesPaths, steadyStatesPaths, referencePaths, goldNetPath, binarisedPath = getPaths(net_num, net_size, subfolder) 
     
     decoder = framework.ContextSpecificDecoder(timeSeriesPaths, steadyStatesPaths = steadyStatesPaths, referenceNetPaths = referencePaths, goldNetPath = goldNetPath, savePath=savePath)       
-    fronts = decoder.getNetworkCandidates()  
+    #fronts = decoder.getNetworkCandidates()  
+    decoder.run()  
 
     print("Number of networks in first Pareto front")   
     print(len(fronts[0]))  
@@ -133,14 +134,14 @@ def runFramework(net_num, net_size, subfolder, savePath = None, debug = True):
         plt.show()       
 
     indices = np.argmin(distances, axis=1)       
-    topMetric = metrics[indices[2]] 
+    topMetric = metrics[indices[2]]  
 
     accuracyImpr = topMetric["Accuracy"] - baseMetric["Accuracy"]
     precisionImpr = topMetric["Precision"] - baseMetric["Precision"] 
-    racallImpr = topMetric["Recall"] - baseMetric["Recall"] 
-    f1Impr = topMetric["F1"] - baseMetric["F1"]  
-    mccImpr = topMetric["MCC"] - baseMetric["MCC"]   
-    bmImpr = topMetric["BM"] - baseMetric["BM"]   
+    racallImpr = topMetric["Recall"] - baseMetric["Recall"]  
+    f1Impr = topMetric["F1"] - baseMetric["F1"]   
+    mccImpr = topMetric["MCC"] - baseMetric["MCC"]    
+    bmImpr = topMetric["BM"] - baseMetric["BM"]     
 
     imprv = {"Accuracy": accuracyImpr, "Precision": precisionImpr, "Recall": racallImpr, "F1": f1Impr, "MCC": mccImpr, "BM": bmImpr}
     print(imprv)  
@@ -149,6 +150,6 @@ def runFramework(net_num, net_size, subfolder, savePath = None, debug = True):
 
 if __name__ == "__main__": 
     matplotlib.use('TkAgg')    
-    main() 
+    main()   
 
     

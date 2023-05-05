@@ -1,6 +1,6 @@
 from dynGENIE3 import *
 from deap import creator, base, tools, algorithms
-from inferelator import inferelator_workflow 
+#from inferelator import inferelator_workflow 
 from sklearn.cluster import KMeans  
 from qm import QuineMcCluskey  
 
@@ -9,7 +9,7 @@ import networkx as nx
 import numpy as np 
 import matplotlib.pyplot as plt 
 import math    
-import multiprocessing
+#import multiprocessing
 import os 
 import pandas as pd 
 import pickle 
@@ -187,16 +187,16 @@ class GeneticSolver:
     #mutP ... mutation probability - defined as a ratio of expected changes in adjacency matrix      
     #indP ... independent probability of flipping an edge 
     #networkProperties ... network properties extracted from reference networks, expression data and user defined 
-    def __init__(self, networkProperties, nGen=10, nSub=1000, cxP=1, mutP=1):                       
-        self.nGen = nGen    
+    def __init__(self, networkProperties, nGen=2, nSub=500, cxP=1, mutP=0.5):                        
+        self.nGen = nGen     
         self.nSub = nSub  
         self.cxP = cxP  
-        self.mutP = mutP                    
-        self.plotParetoPerGeneration = False        
-        self.plotPopulationPerGeneration = False                           
+        self.mutP = mutP                     
+        self.plotParetoPerGeneration = False         
+        self.plotPopulationPerGeneration = False                                 
         
-        self.netProperties = networkProperties   
-        self.nNodes = self.netProperties.nNodes  
+        self.netProperties = networkProperties    
+        self.nNodes = self.netProperties.nNodes   
 
         #self.p1 = indP
         #x = self.netProperties.expEdgeProb  
@@ -206,8 +206,8 @@ class GeneticSolver:
         #print(self.p1)
         #print(self.p2)  
 
-        self.initialPop = 3 # [3,5] #[2,3,4,5]   
-        self.initialPopProb = [0.9, 0.1]                                                                                   
+        self.initialPop = [3,5] #[2,3,4,5]     
+        self.initialPopProb = [0.8, 0.2]                                                                                                 
         #self.initialPop ... modes of generating initial population    
         #0 ... random (equal probability for ede/non-edge)
         #1 ... random (by folowing distribution of number of regulators)
@@ -297,7 +297,7 @@ class GeneticSolver:
         if debug:        
             print(f"Sorting individuals into nondominated levels: {elapsed} seconds elapsed") 
         #scatterPlotSubjects(fronts[0])        
-        return fronts      
+        return fronts          
 
     def eval_subject(self, subject, debug = False):  
         netProperties = self.netProperties  
@@ -336,7 +336,7 @@ class GeneticSolver:
         rankedList = [rankedDictionary[(a,b)] for (a,b) in zip(indcs1[0], indcs1[1])]   
         nonRankedList = [rankedDictionary[(a,b)] for (a,b) in zip(indcs0[0], indcs0[1])]   
         obj1 = sum(rankedList)/sumN - sum(nonRankedList)/sumK    
-      
+
         """
         if obj1 < 1:
             print(obj1)  
@@ -360,9 +360,9 @@ class GeneticSolver:
         regDegCost = np.sum(regDegCost)   
         obj2 = obj2 + regDegCost       
 
-        #eProb = subject.getEdgeProb() 
-        #eProbCost = np.abs(expEdgeProb - eProb)
-        #obj2 = obj2 + eProbCost          
+        eProb = subject.getEdgeProb() 
+        eProbCost = np.abs(expEdgeProb - eProb)
+        obj2 = obj2 + eProbCost          
        
         triC = subject.getNormalisedTriadicCensus()  
         triCost = np.abs(avgTriC - triC)
@@ -373,6 +373,11 @@ class GeneticSolver:
             print("Triadic census of individual:")
             print(triC)         
         
+        #limit objective 1 
+        if obj1 > 1:
+            obj1 = 1000 
+            obj2 = 1000    
+ 
         return obj1, obj2         
 
     #initialize individual   
@@ -495,7 +500,7 @@ class GeneticSolver:
         elif mode == 4:
             return self.generateRegWeightsThresholdAdj()  
         elif mode == 5:
-            return self.generateTopRegulationsAdj() 
+            return self.generateTopRegulationsAdj(stochasticEdgeNumber = False)  
         elif mode == 6:
             return self.generateRefNetsAdj()     
         else:
@@ -516,12 +521,12 @@ class GeneticSolver:
         return ind   
 
     #mutate subject by addition or deletion of edges  
-    def mutation(self, sub):   
-        adjM = sub.getAdjacencyMatrix()         
+    def mutation(self, sub):    
+        adjM = sub.getAdjacencyMatrix()          
 
         #add edge or remove edge with same probability 
         add_edge = True
-        rnd = np.random.rand() 
+        rnd = np.random.rand()  
         if rnd < 0.5:
             add_edge = False  
 
@@ -533,9 +538,9 @@ class GeneticSolver:
         adjM[row, column] = int(add_edge) 
 
         #limit number of regulators   
-        maxRegs = self.netProperties.maxRegs   
-        if np.sum(adjM[:, column]) > maxRegs: 
-            adjM[row, column] = 0      
+        maxRegs = self.netProperties.maxRegs    
+        if np.sum(adjM[:, column]) > maxRegs:  
+            adjM[row, column] = 0            
 
         
         """ 
@@ -600,6 +605,9 @@ def getMetrics(y_true, y_pred):
     accuracy = (TP+TN)/(TP+TN+FP+FN)              
     bm = TPR + TNR - 1.     
     mcc = (TN*TP - FN*FP)/(np.sqrt((TP + FP)*(TP + FN)*(TN + FP)*(TN + FN)))   
+
+    print(f"Precision is {precision}")
+    print(f"TPR is {TPR}")     
 
     return {"Accuracy": accuracy, "Precision": precision,"Recall": TPR,"F1": f1,"MCC": mcc,"BM": bm}  
 
@@ -738,8 +746,8 @@ def getBinaryFromDecimal(value, nBits):
     return [int(i) for i in bin(value)[2:].zfill(nBits)]   
 
 def getUniqueSubjects(subjects):
-    unique_subjects = [] 
-    unique_subjects_set = set()  
+    unique_subjects = []  
+    unique_subjects_set = set()    
 
     for subject in subjects:
         adj = subject.getAdjacencyMatrix() 
@@ -758,6 +766,7 @@ class ContextSpecificDecoder:
     #referenceNetPaths ... file paths list to reference networks 
     #maxRegs ... maximum number of regulators   
     def __init__(self, timeSeriesPaths, steadyStatesPaths=None, referenceNetPaths = None, goldNetPath = None, binarisedPath = None, savePath = None, maxRegs = 10, debug = False):      
+        #set empty list to None 
         if isinstance(steadyStatesPaths, list):  
             if not steadyStatesPaths:  
                 steadyStatesPaths = None   
@@ -767,7 +776,8 @@ class ContextSpecificDecoder:
         self.timeSeriesDf = timeSeriesDf 
         nNodes = len(self.timeSeriesDf.columns) - 1
         geneNamesList = list(self.timeSeriesDf.columns)  
-        geneNamesList.remove("Time")          
+        if "Time" in geneNamesList:
+            geneNamesList.remove("Time")           
         self.geneIndices = {value: indx for indx, value in enumerate(geneNamesList)} 
         self.geneNames =  {indx: value for indx, value in enumerate(geneNamesList)} 
         self.goldNetPath = goldNetPath          
@@ -779,20 +789,21 @@ class ContextSpecificDecoder:
 
         self.binarisedPath = binarisedPath      
 
-        self.steadyStatesDf = None  
-        if steadyStatesPaths is not None:   
-            self.steadyStatesPaths = steadyStatesPaths   
+        self.steadyStatesDf = None   
+        self.steadyStatesPaths = steadyStatesPaths    
+        if steadyStatesPaths is not None:    
             steadyStatesDf = self.readFiles(steadyStatesPaths)   
             self.steadyStatesDf = steadyStatesDf
             if nNodes != len(self.steadyStatesDf.columns):
                 sys.exit("Error: Gene number mismatch between time series and steady states!")
         
-        method_args = {}
+        method_args = {} 
         
-        tmp_path = timeSeriesPaths[0] 
-        weights_path = tmp_path.rsplit(".", 1)[0] + "_weights.pkl"   
+        #tmp_path = timeSeriesPaths[0] 
+        #weights_path = tmp_path.rsplit(".", 1)[0] + "_weights.pkl"   
 
         regWeights = self.getRegulatoryWeights(**method_args) 
+        print(regWeights)  
 
         """
         if not os.path.exists(weights_path):  
@@ -948,11 +959,11 @@ class ContextSpecificDecoder:
     #bNetwork[i] ... [target, regulators, generalised truth table, boolean function, boolean expression, truth table]  
     def getDynamicAccuracy(self, bNetwork, bin_df, experiments_df): 
         total_errors = 0
-        timeSteps = 0
+        timeSteps = 0 
 
         numNodes = bin_df.shape[1] 
-        #simulate Boolean model for each experiment  
-        for experiment in range(self.experiments): 
+        #simulate Boolean model for each experiment   
+        for experiment in range(self.experiments):  
             sel = experiments_df["Experiment"] == experiment 
             bin_df_exp = bin_df[sel]   
             simNum = len(bin_df_exp.index)     
@@ -980,18 +991,18 @@ class ContextSpecificDecoder:
             print(bestAcc)          
             if myAcc > bestAcc:
                 bestAcc =  myAcc   
-                bestNetwork = bNetwork      
-        return bestNetwork                  
+                bestNetwork = bNetwork       
+        return bestNetwork, bestAcc                    
     
     def getGeneralisedTruthTable(self, target, regulators, bin_df, shift_bin_df, experiments_df):  
         reg_shift_df = shift_bin_df.iloc[:,regulators]    
         target_df = bin_df.iloc[:,target]     
         numReg = len(regulators)       
         numRows = pow(2, numReg)         
-        rowValues = list(range(numRows))         
+        rowValues = list(range(numRows))          
 
         gT = pd.DataFrame(rowValues, columns = ["inputVector"])
-        #create zero columns for T and F  
+        #create zero columns for T and F   
         gT["T"] = 0          
         gT["F"] = 0              
 
@@ -1072,14 +1083,12 @@ class ContextSpecificDecoder:
             tT["value"] = int(eval(expr))          
         return tT    
 
-    def inferBooleanNetwork(self, adjM, nNodes, bin_df, shift_bin_df, experiments_df):    
-        b_functions = [] 
-        for target in range(nNodes):  
+    def inferBooleanFunction(self, regulatorsArray, target, bin_df, shift_bin_df, experiments_df):
             gT = None        
             bfun = None  
-            regulators = np.argwhere(adjM[:,target] == 1).ravel()       
+            regulators = np.argwhere(regulatorsArray == 1).flatten()            
 
-            if regulators.size != 0: 
+            if regulators.size != 0:  
                 gT =  self.getGeneralisedTruthTable(target, regulators, bin_df, shift_bin_df, experiments_df)
                 minterms = list(gT[gT["T"] > gT["F"]]["inputVector"])   
                 dont_cares = list(gT[gT["T"] == gT["F"]]["inputVector"])     
@@ -1093,13 +1102,23 @@ class ContextSpecificDecoder:
             bexpr = self.getExpression(bfun, target, regulators)  
             tT = self.getTruthTable(bexpr, regulators)  
 
+            return regulators, gT, bfun, bexpr, tT  
+
+
+    def inferBooleanNetwork(self, adjM, nNodes, bin_df, shift_bin_df, experiments_df):    
+        b_functions = [] 
+        for target in range(nNodes):  
+
+            regulators, gT, bfun, bexpr, tT = self.inferBooleanFunction(adjM[:, target], target, bin_df, shift_bin_df, experiments_df)
+
             b_fun = (target, regulators, gT, bfun, bexpr, tT)            
-            b_functions.append(b_fun)        
+            b_functions.append(b_fun)         
 
         return b_functions                            
 
+    #infers Boolean networks   
     def inferBooleanNetworks(self, subjects, bin_df, shift_bin_df, experiments_df):  
-        #list of boolean networks        
+        #list of Boolean networks        
         bNetworks = []   
         i = 0
         for subject in subjects:
@@ -1110,7 +1129,55 @@ class ContextSpecificDecoder:
             nNodes = subject.nNodes 
             bNetwork = self.inferBooleanNetwork(adjM, nNodes, bin_df, shift_bin_df, experiments_df)    
             bNetworks.append(bNetwork)         
-        return bNetworks          
+        return bNetworks 
+
+    def getUniqueRegulators(self, subjects):
+        nNodes = self.netProperties.nNodes  
+        unique_regulators = {i: ([], set()) for i in range(nNodes)}   
+
+        for subject in subjects:      
+            adj = subject.getAdjacencyMatrix()  
+            for i in range(nNodes):
+                column = adj[:, i] 
+                column_byte_array = column.tobytes()  
+
+                regulators_list, regulators_byte_array_set = unique_regulators[i] 
+                if column_byte_array not in regulators_byte_array_set:
+                    regulators_list.append(column)  
+                    regulators_byte_array_set.add(column_byte_array)       
+        
+        return unique_regulators
+
+    #subjects ... list of unique networks 
+    #bin_df   ... binarised time series data
+    #shift_bin_df ... shifted binarised time series data 
+    #experiments_df ... dataframe denoting experiments and time points 
+    def getBestCombinedBooleanModel(self, subjects, bin_df, shift_bin_df, experiments_df):
+        nNodes = self.netProperties.nNodes 
+        b_functions = []      
+        unique_regulators = self.getUniqueRegulators(subjects)     
+        for target in range(nNodes):    
+            regulators_list, _ = unique_regulators[target]
+            min_error = len(bin_df.index)*nNodes    
+            min_function = None  
+            for regulator_array in regulators_list: 
+                regulators, gT, bfun, bexpr, tT = self.inferBooleanFunction(regulator_array, target, bin_df, shift_bin_df, experiments_df)  
+
+                if gT is not None:     
+                    sumS = gT["T"] + gT["F"]   
+                    eT = (gT[tT.value == 1]["F"]/sumS[tT.value == 1]).sum()            
+                    eF = (gT[tT.value == 0]["T"]/sumS[tT.value == 0]).sum()   
+                    error = eT + eF 
+                else: 
+                    #define dummy error smaller than the initial error value 
+                    error = len(bin_df.index)*nNodes - 1         
+
+                if error < min_error:     
+                    min_error = error   
+                    min_function = (target, regulators, gT, bfun, bexpr, tT)       
+
+            b_functions.append(min_function)  
+        return b_functions         
 
     def iterativeKmeans(self, data, d=3):     
         data = np.array(data)                
@@ -1143,10 +1210,10 @@ class ContextSpecificDecoder:
         print("Number of networks in first Pareto front")   
         print(len(fronts[0]))  
 
-        #get unique subjects  
-        front = getUniqueSubjects(fronts[0])   
-        print("Number of unique networks in first Pareto front") 
-        print(len(front)) 
+        #get unique subjects on last population    
+        subjects = getUniqueSubjects([sub for front in fronts for sub in front])      
+        print("Number of unique networks in final population of evolutionary algorithm")    
+        print(len(subjects))    
 
         binarisedPath = self.binarisedPath  
         if os.path.exists(binarisedPath): 
@@ -1170,11 +1237,17 @@ class ContextSpecificDecoder:
 
         #bNetworks ... list of Boolean networks
         ##bNetwork[i] ... [target, regulators, generalised truth table, boolean function, boolean expression, truth table]  
-        bNetworks = self.inferBooleanNetworks(front, bin_df, shift_bin_df, experiments_df)         
+        bNetworks = self.inferBooleanNetworks(subjects, bin_df, shift_bin_df, experiments_df)           
 
-        #select best network          
-        best = self.getBestBooleanModel(bNetworks, bin_df, shift_bin_df, experiments_df)      
-        return best        
+        #select best network           
+        best, bestAcc = self.getBestBooleanModel(bNetworks, bin_df, shift_bin_df, experiments_df)         
+        bestCombined = self.getBestCombinedBooleanModel(subjects, bin_df, shift_bin_df, experiments_df)     
+        myAcc = self.getDynamicAccuracy(bestCombined, bin_df, experiments_df)                  
+        print(myAcc) 
+        if myAcc > bestAcc: 
+            best = bestCombined  
+
+        return best            
 
     def readFiles(self, filePaths):
         df_all = pd.DataFrame() 
@@ -1197,8 +1270,8 @@ class ContextSpecificDecoder:
         return reference_nets    
 
     #infer putative regulatory probability estimates 
-    def getRegulatoryWeights(self, method="inferelator", **method_args):
-        supportedMethods = ["dynGENIE3", "inferelator"]  
+    def getRegulatoryWeights(self, method="dynGENIE3", **method_args):  
+        supportedMethods = ["dynGENIE3", "inferelator"]   
 
         #set experiment count
         self.timeSeriesDf["Experiment"] = 0  
@@ -1213,6 +1286,9 @@ class ContextSpecificDecoder:
             print(f"{method} is not supported! Using dynGENIE3.") 
         
         if method == "dynGENIE3":
+            #define inference method specific arguments   
+            #method_args["ntrees"] = 500    
+            #method_args["K"] = "all"      
             return self.run_dynGENIE3(**method_args)   
         elif method == "inferelator": 
             return self.run_inferelator(**method_args)   
@@ -1221,8 +1297,8 @@ class ContextSpecificDecoder:
     def run_dynGENIE3(self, **method_args):
         #TS_data ... list of time series experiments as numpy arrays
         #time_points ... list of time points as one dimensional numpy arrays 
-        TS_data = []  
-        time_points = []      
+        TS_data = []    
+        time_points = []         
         
         columnNames = list(self.timeSeriesDf.columns) 
         columnNames.remove("Experiment")  
@@ -1241,10 +1317,12 @@ class ContextSpecificDecoder:
 
         #probabilites are normalised column-wise   
         regulatory_probs, _, _, _, _ = dynGENIE3(TS_data, time_points, **method_args) 
-        print(regulatory_probs) 
+        print(regulatory_probs)  
         return regulatory_probs   
     
     def run_inferelator(self, **method_args): 
+        return None  
+        """
         worker = inferelator_workflow(regression="bbsr", workflow="tfa")         
         worker.set_run_parameters(num_bootstraps=5, random_seed=42) 
 
@@ -1255,69 +1333,69 @@ class ContextSpecificDecoder:
         tf_names_file = self.timeSeriesPaths[0].rsplit(".", 1)[0] + "_tf_names.tsv"     
 
         #if expression matrix file and metadata file does not exists generate file 
-        #if not os.path.exists(expression_matrix_file): 
-        df = self.timeSeriesDf  
-        columns = list(df.columns)    
-        columns.remove("Time")  
-        columns.remove("Experiment")
-        df = df[columns] 
-        time_series_df = self.timeSeriesDf[["Time", "Experiment"]] 
-        time_series_shift_df = time_series_df.shift(periods=1) 
-        time_series_shift_down_df = time_series_df.shift(periods=-1)   
+        if not os.path.exists(expression_matrix_file): 
+            df = self.timeSeriesDf  
+            columns = list(df.columns)    
+            columns.remove("Time")  
+            columns.remove("Experiment")
+            df = df[columns] 
+            time_series_df = self.timeSeriesDf[["Time", "Experiment"]] 
+            time_series_shift_df = time_series_df.shift(periods=1) 
+            time_series_shift_down_df = time_series_df.shift(periods=-1)   
 
 
-        tf_names = list(self.geneIndices.keys()) 
-        tf_names_df = pd.DataFrame({"tf_names": tf_names}) 
+            tf_names = list(self.geneIndices.keys()) 
+            tf_names_df = pd.DataFrame({"tf_names": tf_names}) 
 
-        print(time_series_df)  
+            print(time_series_df)  
 
-        if self.steadyStatesPaths is not None:   
-            df = pd.concat([df, self.steadyStatesDf])              
+            if self.steadyStatesPaths is not None:   
+                df = pd.concat([df, self.steadyStatesDf])              
 
-        rowNumAll = len(df.index) 
-        rowNumTimeSeries = len(time_series_df.index)   
+            rowNumAll = len(df.index) 
+            rowNumTimeSeries = len(time_series_df.index)   
 
-        df.insert(0, "cond", ['"' + str(el) + '"' for el in range(rowNumAll)])      
+            df.insert(0, "cond", ['"' + str(el) + '"' for el in range(rowNumAll)])      
 
-        df_metadata =  pd.DataFrame({"isTs": [False]*rowNumAll, "is1stLast":["NA"]*rowNumAll, "prevCol":["NA"]*rowNumAll, "del.t":[np.nan]*rowNumAll, "condName":['"' + str(el) + '"' for el in range(rowNumAll)]})   
-        df_metadata.loc[0:rowNumTimeSeries-1, "isTs"] = True      
-        
-        print(df_metadata)
+            df_metadata =  pd.DataFrame({"isTs": [False]*rowNumAll, "is1stLast":["NA"]*rowNumAll, "prevCol":["NA"]*rowNumAll, "del.t":[np.nan]*rowNumAll, "condName":['"' + str(el) + '"' for el in range(rowNumAll)]})   
+            df_metadata.loc[0:rowNumTimeSeries-1, "isTs"] = True      
+            
+            print(df_metadata)
 
-        print(time_series_df["Time"] - time_series_shift_df["Time"])   
-        df_metadata.loc[0:rowNumTimeSeries-1, "del.t"] = time_series_df["Time"] - time_series_shift_df["Time"] 
-        
-        boolList = list(time_series_df["Experiment"] > time_series_shift_df["Experiment"]) 
-        boolList[0] = True  
-        boolList.extend([False]*(rowNumAll - rowNumTimeSeries)) 
-        df_metadata.loc[boolList, "is1stLast"] = "f"        
-        #df_metadata.loc[df_metadata["del.t"] < 0, "is1stLast"] = "l"  
-        df_metadata.loc[df_metadata["del.t"] > 0, "is1stLast"] = "m"  
-        boolList = list(time_series_df["Experiment"] < time_series_shift_down_df["Experiment"]) 
-        boolList[-1] = True 
-        boolList.extend([False]*(rowNumAll - rowNumTimeSeries)) 
-        df_metadata.loc[boolList, "is1stLast"] = "l"              
+            print(time_series_df["Time"] - time_series_shift_df["Time"])   
+            df_metadata.loc[0:rowNumTimeSeries-1, "del.t"] = time_series_df["Time"] - time_series_shift_df["Time"] 
+            
+            boolList = list(time_series_df["Experiment"] > time_series_shift_df["Experiment"]) 
+            boolList[0] = True  
+            boolList.extend([False]*(rowNumAll - rowNumTimeSeries)) 
+            df_metadata.loc[boolList, "is1stLast"] = "f"         
+            df_metadata.loc[df_metadata["del.t"] > 0, "is1stLast"] = "m"  
+            boolList = list(time_series_df["Experiment"] < time_series_shift_down_df["Experiment"]) 
+            boolList[-1] = True   
+            boolList.extend([False]*(rowNumAll - rowNumTimeSeries)) 
+            df_metadata.loc[boolList, "is1stLast"] = "l"              
 
-        df_metadata.loc[df_metadata["del.t"] < 0, "del.t"] = "NA"   
+            df_metadata.loc[df_metadata["del.t"] < 0, "del.t"] = "NA"   
 
-        df_metadata.loc[0:rowNumTimeSeries-1, "prevCol"] = ['"' + str(el) + '"' for el in range(-1, rowNumTimeSeries - 1)]            
-        df_metadata.loc[df_metadata["is1stLast"] == "f", "prevCol"] = "NA"     
-        df_metadata.fillna("NA", inplace=True)   
+            df_metadata.loc[0:rowNumTimeSeries-1, "prevCol"] = ['"' + str(el) + '"' for el in range(-1, rowNumTimeSeries - 1)]            
+            df_metadata.loc[df_metadata["is1stLast"] == "f", "prevCol"] = "NA"     
+            df_metadata.fillna("NA", inplace=True)   
 
-        df.to_csv(expression_matrix_file, sep="\t", index=False)       
-        tf_names_df.to_csv(tf_names_file, sep="\t", index=False, header=None,  quotechar='"', quoting=csv.QUOTE_ALL)   
-        df_metadata.to_csv(metadata_file, sep="\t", index= False, quotechar='"')           
+            df.to_csv(expression_matrix_file, sep="\t", index=False)       
+            tf_names_df.to_csv(tf_names_file, sep="\t", index=False, header=None,  quotechar='"', quoting=csv.QUOTE_ALL)   
+            df_metadata.to_csv(metadata_file, sep="\t", index= False, quotechar='"')            
 
-        worker.set_network_data_flags(use_no_gold_standard=True, use_no_prior=True)         
+        worker.set_network_data_flags(use_no_gold_standard=True, use_no_prior=True)          
         worker.set_file_paths(input_dir=".", 
                       output_dir="./output_inferelator",
                       expression_matrix_file=expression_matrix_file, 
                       tf_names_file = tf_names_file,       
                       meta_data_file=metadata_file)       
         
-        network_result = worker.run()    
-        print(network_result)   
-
+        network_result = worker.run()      
+        regulatory_probs = network_result.combined_confidences  
+        return regulatory_probs.to_numpy()            
+        """
 
 
 
