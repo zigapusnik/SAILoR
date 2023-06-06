@@ -17,7 +17,7 @@ import sklearn.metrics as metrics
 import sys  
 import time      
 
-class Network:  
+class Network:   
     #nNodes ... network size
     #adjM ... np.array representing adjacency matrix
     #prevAdjM ... previous adjacency matrix
@@ -98,32 +98,31 @@ class Network:
     def getAdjacencyMatrix(self):
         return self.adjM 
     
-    #returns distribution of number of regulators 
-    def getRegDegs(self, maxRegs):
-        regDegs = np.zeros(maxRegs + 1)
+    #returns distribution of nodes in-degrees
+    def getInDegs(self, maxRegs):
+        inDegs = np.zeros(maxRegs + 1)
         if self.adjM is not None:
-            regNums = np.sum(self.adjM, axis=0).astype(int)       
-            regNums[regNums > maxRegs] = maxRegs 
+            inNums = np.sum(self.adjM, axis=0).astype(int)       
+            inNums[inNums > maxRegs] = maxRegs 
 
-            for regNum in regNums:
-                regDegs[regNum] += 1
+            for inNum in inNums:
+                inDegs[inNum] += 1
 
-        totalRegs = np.sum(regDegs)
-        regDegs = regDegs/totalRegs  
-        return regDegs   
+        totalIn = np.sum(inDegs)
+        return inDegs/totalIn    
     
-    def getRegulatesDegs(self, maxRegulates):
-        regulatesDegs = np.zeros(maxRegulates + 1) 
+    #returns distribution of nodes out-degrees
+    def getOutDegs(self, maxRegulates):
+        outDegs = np.zeros(maxRegulates + 1) 
         if self.adjM is not None: 
-            regulatesNums = np.sum(self.adjM, axis=1).astype(int)       
-            regulatesNums[regulatesNums > maxRegulates] = maxRegulates 
+            outNums = np.sum(self.adjM, axis=1).astype(int)       
+            outNums[outNums > maxRegulates] = maxRegulates 
 
-            for regulatesNum in regulatesNums:
-                regulatesDegs[regulatesNum] += 1
+            for outNum in outNums:
+                outDegs[outNum] += 1
 
-        totalRegulates = np.sum(regulatesDegs)
-        regulatesDegs = regulatesDegs/totalRegulates  
-        return regulatesDegs     
+        totalOut = np.sum(outDegs)
+        return outDegs/totalOut      
 
     #returns edge probability between two nodes 
     def getEdgeProb(self): 
@@ -187,43 +186,38 @@ class GeneticSolver:
     #mutP ... mutation probability - defined as a ratio of expected changes in adjacency matrix      
     #indP ... independent probability of flipping an edge 
     #networkProperties ... network properties extracted from reference networks, expression data and user defined 
-    def __init__(self, networkProperties, nGen=2, nSub=500, cxP=1, mutP=0.5):                        
+    def __init__(self, networkProperties, obj2Weights = None, nGen=10, nSub=500, cxP=1, mutP=1):                        
+        
+        self.netProperties = networkProperties     
+        self.nNodes = self.netProperties.nNodes   
+
+        self.obj2Weights = obj2Weights  
+        
         self.nGen = nGen     
         self.nSub = nSub  
         self.cxP = cxP  
         self.mutP = mutP                     
-        self.plotParetoPerGeneration = False         
-        self.plotPopulationPerGeneration = False                                 
-        
-        self.netProperties = networkProperties    
-        self.nNodes = self.netProperties.nNodes   
+        self.plotParetoPerGeneration = False           
+        self.plotPopulationPerGeneration = False                                         
 
-        #self.p1 = indP
-        #x = self.netProperties.expEdgeProb  
-        #self.p2 = x*self.p1/(1 - x)   
-        
-        #print(self.netProperties.expEdgeProb)  
-        #print(self.p1)
-        #print(self.p2)  
-
-        self.initialPop = [3,5] #[2,3,4,5]     
-        self.initialPopProb = [0.8, 0.2]                                                                                                 
+        self.initialPop = [3, 5]      
+        self.initialPopProb = [0.99, 0.01]                                                                                                        
         #self.initialPop ... modes of generating initial population    
         #0 ... random (equal probability for ede/non-edge)
         #1 ... random (by folowing distribution of number of regulators)
         #2 ... based on reg. weights (select proportionate to edge probability and distribution of number of regulators)
-        #3 ... based on reg. weights (select top k regulations based on distribution of number of regulators)
-        #4 ... based on reg. weights and given threshold, if threshold is not given use dynamic threshold   
+        #3 ... based on reg. weights (select top k regulators based on distribution of number of regulators - in-degree)  
+        #4 ... based on reg. weights (select top k regulations based on distribution of number of regulations - out-degree)           
         #5 ... based on top k ranked regulations, k is obtained from expected number of edges  
-        #6 ... extracted from reference networks
-        #list of modes ... each subject is generated with randomly selected mode   
-         
+        #6 ... based on reg. weights and given threshold, if threshold is not given use dynamic threshold 
+        #7 ... extracted from reference networks
+        #list of modes ... each subject is generated with randomly selected mode     
                  
         #create multiobjective fitness to maximize objective (1) and minimize it (-1) 
-        creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))      
-        creator.create("Individual", Network, fitness=creator.FitnessMulti)    
+        creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))       
+        creator.create("Individual", Network, fitness=creator.FitnessMulti)      
 
-        toolbox = base.Toolbox()    
+        toolbox = base.Toolbox()      
         toolbox.register("individual", self.generate_subject)
         toolbox.register("population", self.generate_population)
         toolbox.register("evaluate", self.eval_subject)  
@@ -238,11 +232,12 @@ class GeneticSolver:
         #toolbox.register("map", pool.map) 
         self.toolbox = toolbox
         
-    def run(self, debug = False):   
+    def run(self, debug = False):    
         #generate initial population 
         population = self.toolbox.population()
 
-        print("Number of unique subjects: " + str(len(getUniqueSubjects(population))))  
+        if debug:
+            print("Number of unique subjects: " + str(len(getUniqueSubjects(population))))  
 
         #evaluate initial population 
         fitnesses = self.toolbox.map(self.toolbox.evaluate, population)  
@@ -280,8 +275,7 @@ class GeneticSolver:
 
             #Tournament selection based on dominance (D) between two individuals
             #If the two individuals do not interdominate the selection is made based on crowding distance (CD)  
-            population = self.toolbox.select(population, self.nSub)   
-            print("Number of unique subjects: " + str(len(getUniqueSubjects(population))))           
+            population = self.toolbox.select(population, self.nSub)          
 
             if self.plotParetoPerGeneration:
                 fronts = self.toolbox.sortNondominated(population, self.nSub, first_front_only = True) 
@@ -299,12 +293,16 @@ class GeneticSolver:
         #scatterPlotSubjects(fronts[0])        
         return fronts          
 
-    def eval_subject(self, subject, debug = False):  
+    def eval_subject(self, subject, debug = False):     
         netProperties = self.netProperties  
-        regWeights = netProperties.regWeights   
-        avgRegDegs = netProperties.avgRegDegs
-        avgRegulatesDegs = netProperties.avgRegulatesDegs      
-        expEdgeProb = netProperties.expEdgeProb 
+        #in-degree distribution
+        avgInDegs = netProperties.avgInDegs
+        #out-degree distribution   
+        avgOutDegs = netProperties.avgOutDegs    
+
+        #regWeights = netProperties.regWeights   
+        #favorize less sparsely connected networks  
+        expEdgeProb = 1*netProperties.expEdgeProb  
         avgTriC = netProperties.avgTriC   
         maxRegs = netProperties.maxRegs 
         rankedDictionary  = netProperties.rankedDictionary        
@@ -314,71 +312,72 @@ class GeneticSolver:
         indcs1 = np.where(adjM == 1)  
         nCon = self.nNodes*self.nNodes    
 
-        #cost \sum_{i=1}^{r}(1 - p_i) ... for all regulations 
         nonRegulations = len(indcs0[0])  
-        regulations = len(indcs1[0])      
-
-        if debug:
-            print(f"Number of regulations: {len(regulations)}") 
-            print(f"Number of non-regulations: {len(nonRegulations)}")   
-
-        """
-        if regulations == 0 or nonRegulations == 0:
-            obj1 = 1      
-        else:
-            #obj1 = np.sum(1 - regWeights[indcs1])/regulations 
-            obj1 = np.sum(1 - regWeights[indcs1])/regulations + np.sum(regWeights[indcs0])/nonRegulations                                
-        
-        """
+        regulations = len(indcs1[0])       
 
         sumN = regulations*(regulations + 1)/2 
         sumK = nonRegulations*(regulations + nCon + 1)/2    
         rankedList = [rankedDictionary[(a,b)] for (a,b) in zip(indcs1[0], indcs1[1])]   
         nonRankedList = [rankedDictionary[(a,b)] for (a,b) in zip(indcs0[0], indcs0[1])]   
-        obj1 = sum(rankedList)/sumN - sum(nonRankedList)/sumK    
+        obj1 = sum(rankedList)/sumN - sum(nonRankedList)/sumK                     
 
-        """
-        if obj1 < 1:
-            print(obj1)  
-            print(rankedList) 
-            print(sum(rankedList)/sumN) 
-            print(sum(nonRankedList)/sumK) 
-        """
+        obj2 = 0 
+        obj2List = []  
+        if self.obj2Weights is not None: 
+            obj2Weights = self.obj2Weights
+            
+            if debug:   
+                print(f"Values for weights of topological properties: {obj2Weights}")   
+        else: 
+            #if weights for topological loss functions is not defined use default values  
+            obj2Weights = np.array([0.25, 0.25, 0.25, 0.25])                          
 
-        #use logarithm for numerical stability     
-        #obj1 = -np.sum(np.log(regWeights[indcs1])) - np.sum(np.log(1- regWeights[indcs0]))                
+        #cost functions based on comparison of distributions are based on overlap score     
+        outDegDist = subject.getOutDegs(maxRegs)     
+        outDegOverlap = np.minimum(avgOutDegs, outDegDist)
+        outDegCost = 1 - np.sum(outDegOverlap)    
+        obj2List.append(outDegCost)       
 
-        obj2 = 0
-
-        regulatesDegDist = subject.getRegulatesDegs(maxRegs)  
-        regulatesDegCost = np.abs(avgRegulatesDegs - regulatesDegDist)
-        regulatesDegCost = np.sum(regulatesDegCost) 
-        obj2 = obj2 + regulatesDegCost           
-
-        regDegDist = subject.getRegDegs(maxRegs)    
-        regDegCost = np.abs(avgRegDegs - regDegDist)
-        regDegCost = np.sum(regDegCost)   
-        obj2 = obj2 + regDegCost       
+        inDegDist = subject.getInDegs(maxRegs)     
+        inDegOverlap = np.minimum(avgInDegs, inDegDist)    
+        inDegCost = 1 - np.sum(inDegOverlap)           
+        obj2List.append(inDegCost)               
+        
+        triC = subject.getNormalisedTriadicCensus()          
+        triOverlap = np.minimum(avgTriC,triC)              
+        triCost = 1 - np.sum(triOverlap)      
+        obj2List.append(triCost)         
 
         eProb = subject.getEdgeProb() 
         eProbCost = np.abs(expEdgeProb - eProb)
-        obj2 = obj2 + eProbCost          
-       
-        triC = subject.getNormalisedTriadicCensus()  
-        triCost = np.abs(avgTriC - triC)
-        triCost = np.sum(triCost) 
-        obj2 = obj2 + triCost         
-        
+        if eProb < expEdgeProb:       
+            eProbCost = eProbCost/expEdgeProb 
+        else: 
+            eProbCost = eProbCost/(1 - expEdgeProb)      
+               
+        obj2List.append(eProbCost)                           
+
+        obj2List = np.array(obj2List)                    
+        obj2 = np.dot(obj2Weights, obj2List) 
+
+
         if debug:
-            print("Triadic census of individual:")
-            print(triC)         
-        
-        #limit objective 1 
-        if obj1 > 1:
-            obj1 = 1000 
-            obj2 = 1000    
- 
-        return obj1, obj2         
+            print("outDeg cost is")
+            print(outDegCost)
+
+            print("inDeg cost is")
+            print(inDegCost) 
+
+            print("Triadic cost is")
+            print(triCost) 
+
+            print("eProb cost is")
+            print(eProbCost)  
+
+            print("Topological cost is")
+            print(obj2)  
+
+        return obj1, obj2          
 
     #initialize individual   
     def generate_population(self):    
@@ -422,9 +421,9 @@ class GeneticSolver:
             regNum = np.random.choice(maxRegs + 1, 1, replace=False, p=avgRegDegs)[0]
             #select and assign regulators     
             regNums = np.random.choice(self.nNodes, regNum, replace=False, p = regWeights[:,i] if regWeights is not None else None)          
-            adj[regNums, i] = 1
+            adj[regNums, i] = 1 
 
-        return adj     
+        return adj       
     
     #generate adjacency matrix based on threshold
     def generateRegWeightsThresholdAdj(self, threshold = None):     
@@ -442,20 +441,44 @@ class GeneticSolver:
         regWeights = netProperties.regWeights  
         return self.generateRandomRegDistAdj(regWeights = regWeights)      
 
-    def generateRegWeightsTopKAdj(self):  
+    #select top k regulators based on distribution of number of regulators 
+    def generateRegWeightsTopKAdjInDegree(self):   
         netProperties = self.netProperties
-        avgRegDegs = netProperties.avgRegDegs   
-        maxRegs = netProperties.maxRegs
-        regWeightsSortIndices = netProperties.regWeightsSortIndices 
+        avgInDegs = netProperties.avgInDegs   
+        maxRegs = netProperties.maxRegs 
+        regWeightsSortIndicesInDegree = netProperties.regWeightsSortIndicesInDegree 
 
         adj = np.zeros((self.nNodes, self.nNodes))
 
         for i in range(self.nNodes):         
             #select number of regulators given probs
-            regNum = np.random.choice(maxRegs + 1, 1, replace=False, p=avgRegDegs)[0]
-            ind = regWeightsSortIndices[:,i][-regNum] #select last regNum regulators with highest scores                      
-            adj[ind, i] = 1          
-        return adj            
+            regNum = np.random.choice(maxRegs + 1, 1, replace=False, p=avgInDegs)[0]
+            #use at least one regulator 
+            if regNum == 0:
+                regNum = 1
+
+            indcs = regWeightsSortIndicesInDegree[:,i][-regNum:] #select last regNum regulators with highest scores     
+            
+            for ind in indcs:   
+                adj[ind, i] = 1             
+        return adj 
+
+    def generateRegWeightsTopKAdjOutDegree(self): 
+        netProperties = self.netProperties   
+        avgOutDegs = netProperties.avgOutDegs  
+        maxRegs = netProperties.maxRegs    
+        regWeightsSortIndicesOutDegree = netProperties.regWeightsSortIndicesOutDegree  
+
+        adj = np.zeros((self.nNodes, self.nNodes))
+
+        for i in range(self.nNodes):
+            regNum = np.random.choice(maxRegs + 1, 1, replace=False, p=avgOutDegs)[0]
+
+            indcs = regWeightsSortIndicesOutDegree[i,:][-regNum:] #select last regNum regulators with highest scores 
+            
+            for ind in indcs:    
+                adj[i, ind] = 1             
+        return adj     
 
     #generate adjacency matrix based on reference networks 
     #TO DO ... generate adjacency matrix based on matched gene names  
@@ -488,6 +511,14 @@ class GeneticSolver:
 
         return adjRef      
 
+    #0 ... random (equal probability for ede/non-edge)
+    #1 ... random (by folowing distribution of number of regulators)
+    #2 ... based on reg. weights (select proportionate to edge probability and distribution of number of regulators)
+    #3 ... based on reg. weights (select top k regulators based on distribution of number of regulators - in-degree)  
+    #4 ... based on reg. weights (select top k regulations based on distribution of number of regulations - out-degree)           
+    #5 ... based on top k ranked regulations, k is obtained from expected number of edges  
+    #6 ... based on reg. weights and given threshold, if threshold is not given use dynamic threshold 
+    #7 ... extracted from reference networks  
     def generateInitialAdjMatrix(self, mode):
         if mode == 0:
             return self.generateRandomAdj() 
@@ -496,13 +527,15 @@ class GeneticSolver:
         elif mode == 2:
             return self.generateRegWeightsAdj() 
         elif mode == 3:
-            return self.generateRegWeightsTopKAdj() 
+            return self.generateRegWeightsTopKAdjInDegree() 
         elif mode == 4:
-            return self.generateRegWeightsThresholdAdj()  
-        elif mode == 5:
-            return self.generateTopRegulationsAdj(stochasticEdgeNumber = False)  
+            return self.generateRegWeightsTopKAdjOutDegree()     
+        elif mode == 5: 
+            return self.generateTopRegulationsAdj(stochasticEdgeNumber = False)     
         elif mode == 6:
-            return self.generateRefNetsAdj()     
+            return self.generateRegWeightsThresholdAdj() 
+        elif mode == 7:
+            return self.generateRefNetsAdj()  
         else:
             print(f"Invalid parameter for generation of initial population. Switching to random subjects following distribution of number of regulators from reference networks (mode = 1).")   
             return self.generateInitialAdjMatrix(1)           
@@ -528,7 +561,7 @@ class GeneticSolver:
         add_edge = True
         rnd = np.random.rand()  
         if rnd < 0.5:
-            add_edge = False  
+            add_edge = False    
 
         indices = np.where(adjM == int(not add_edge))  
         ind_num = np.random.choice(len(indices[0]))            
@@ -604,10 +637,7 @@ def getMetrics(y_true, y_pred):
     f1 = 2*(precision*TPR)/(precision + TPR)     
     accuracy = (TP+TN)/(TP+TN+FP+FN)              
     bm = TPR + TNR - 1.     
-    mcc = (TN*TP - FN*FP)/(np.sqrt((TP + FP)*(TP + FN)*(TN + FP)*(TN + FN)))   
-
-    print(f"Precision is {precision}")
-    print(f"TPR is {TPR}")     
+    mcc = (TN*TP - FN*FP)/(np.sqrt((TP + FP)*(TP + FN)*(TN + FP)*(TN + FN)))    
 
     return {"Accuracy": accuracy, "Precision": precision,"Recall": TPR,"F1": f1,"MCC": mcc,"BM": bm}  
 
@@ -654,9 +684,9 @@ def getDistances(paretoFront):
     #transalte
     fitnesses = fitnesses - min_objectives[:, np.newaxis] 
     #scale 
-    fitnesses = fitnesses/(scale[:, np.newaxis])   
+    fitnesses = fitnesses/(scale[:, np.newaxis])      
     distances = np.sqrt(np.sum(fitnesses*fitnesses, axis=0)) 
-    return np.vstack([fitnesses, distances])     
+    return np.vstack([fitnesses, distances])      
 
 # Class of expected network properties extracted from reference networks including  
 # referenceNets ... list of reference networks
@@ -670,18 +700,19 @@ class NetworkProperties:
         self.geneIndices = geneIndices    
         self.geneNames = geneNames   
         self.maxRegs = maxRegs 
-        self.avgRegDegs = self.getAvgRegDegs()     
-        self.avgRegulatesDegs = self.getAvgRegulatesDegs()   
+        self.avgInDegs = self.getAvgInDegs()     
+        self.avgOutDegs = self.getAvgOutDegs()   
         self.expEdgeProb = self.getExpectedEdgeProbability()   
-        self.avgTriC = self.getAvgTriadicCensus()      
+        self.avgTriC = self.getAvgTriadicCensus()       
         
         self.regWeights = regWeights
-        self.regWeightsSortIndices = np.argsort(regWeights, axis=0)
+        self.regWeightsSortIndicesInDegree = np.argsort(regWeights, axis=0)
+        self.regWeightsSortIndicesOutDegree = np.argsort(regWeights, axis=1)
         #tuple of three lists (regulatorIndices, regulatedIndices, regWeights) 
         self.rankedListWeightsTuple = self.getRankedList() 
         #create dictionary of regulations ranks for fast lookup  
         rankedTuple = list(zip(self.rankedListWeightsTuple[0], self.rankedListWeightsTuple[1]))
-        rankedTuple = list(zip(rankedTuple, list(range(1,len(rankedTuple)+1)))) 
+        rankedTuple = list(zip(rankedTuple, list(range(1,len(rankedTuple)+1))))  
         self.rankedDictionary = dict(rankedTuple)         
 
     def getRankedList(self):
@@ -709,21 +740,21 @@ class NetworkProperties:
         triC = triC/sumTriC   
         return triC    
 
-    def getAvgRegDegs(self):
-        avgRegDegs = np.zeros(self.maxRegs + 1)
+    def getAvgInDegs(self):
+        avgInDegs = np.zeros(self.maxRegs + 1)
         for refNet in self.referenceNets:
-             avgRegDegs = avgRegDegs + refNet.getRegDegs(self.maxRegs) 
+             avgInDegs = avgInDegs + refNet.getInDegs(self.maxRegs) 
 
-        degSum = np.sum(avgRegDegs)   
-        return avgRegDegs/degSum  
+        inSum = np.sum(avgInDegs)   
+        return avgInDegs/inSum   
 
-    def getAvgRegulatesDegs(self):   
-        avgRegulatesDegs = np.zeros(self.maxRegs + 1)
-        for refNet in self.referenceNets:
-             avgRegulatesDegs = avgRegulatesDegs + refNet.getRegulatesDegs(self.maxRegs)   
+    def getAvgOutDegs(self):   
+        avgOutDegs = np.zeros(self.maxRegs + 1)
+        for refNet in self.referenceNets: 
+             avgOutDegs = avgOutDegs + refNet.getOutDegs(self.maxRegs)     
 
-        degSum = np.sum(avgRegulatesDegs)   
-        return avgRegulatesDegs/degSum   
+        outSum = np.sum(avgOutDegs)   
+        return avgOutDegs/outSum    
 
 #calculate semi tensor product for Boolean expressions  
 def getBooleanBySemiTensorProduct(mf, X): 
@@ -765,7 +796,7 @@ class ContextSpecificDecoder:
     #steadyStatesPaths ... file paths list to steady states data
     #referenceNetPaths ... file paths list to reference networks 
     #maxRegs ... maximum number of regulators   
-    def __init__(self, timeSeriesPaths, steadyStatesPaths=None, referenceNetPaths = None, goldNetPath = None, binarisedPath = None, savePath = None, maxRegs = 10, debug = False):      
+    def __init__(self, timeSeriesPaths, steadyStatesPaths=None, referenceNetPaths = None, goldNetPath = None, binarisedPath = None, savePath = None, maxRegs = 10, debug = False, obj2Weights = None):        
         #set empty list to None 
         if isinstance(steadyStatesPaths, list):  
             if not steadyStatesPaths:  
@@ -781,7 +812,8 @@ class ContextSpecificDecoder:
         self.geneIndices = {value: indx for indx, value in enumerate(geneNamesList)} 
         self.geneNames =  {indx: value for indx, value in enumerate(geneNamesList)} 
         self.goldNetPath = goldNetPath          
-        self.savePath = savePath     
+        self.savePath = savePath    
+        self.obj2Weights = obj2Weights     
 
         if binarisedPath is None:
             tmp_path = timeSeriesPaths[0] 
@@ -802,8 +834,7 @@ class ContextSpecificDecoder:
         #tmp_path = timeSeriesPaths[0] 
         #weights_path = tmp_path.rsplit(".", 1)[0] + "_weights.pkl"   
 
-        regWeights = self.getRegulatoryWeights(**method_args) 
-        print(regWeights)  
+        regWeights = self.getRegulatoryWeights(**method_args)   
 
         """
         if not os.path.exists(weights_path):  
@@ -825,7 +856,7 @@ class ContextSpecificDecoder:
 
         use_xor = False  
         self.qm = QuineMcCluskey(use_xor = use_xor)
-        self.genSolver = GeneticSolver(netProperties)                     
+        self.genSolver = GeneticSolver(netProperties, obj2Weights=obj2Weights)                        
 
     def test(self, subjects, debug = False):   
         
@@ -858,27 +889,28 @@ class ContextSpecificDecoder:
 
         baseNetwork = Network(nNodes = baseAdj.shape[0], adjM = baseAdj)   
         
-        print("Regulates degrees") 
-        print(gold_standard.getRegulatesDegs(self.netProperties.maxRegs))  
-        print(baseNetwork.getRegulatesDegs(self.netProperties.maxRegs))    
-        print(self.netProperties.avgRegulatesDegs)   
+        if debug:
+            print("Regulates degrees") 
+            print(gold_standard.getOutDegs(self.netProperties.maxRegs))  
+            print(baseNetwork.getOutDegs(self.netProperties.maxRegs))    
+            print(self.netProperties.avgOutDegs)   
 
-        print("Regulatory degrees") 
-        print(gold_standard.getRegDegs(self.netProperties.maxRegs))  
-        print(baseNetwork.getRegDegs(self.netProperties.maxRegs))    
-        print(self.netProperties.avgRegDegs)  
+            print("Regulatory degrees") 
+            print(gold_standard.getInDegs(self.netProperties.maxRegs))  
+            print(baseNetwork.getInDegs(self.netProperties.maxRegs))    
+            print(self.netProperties.avgInDegs)    
 
-        print("Triadic census") 
-        print(gold_standard.getNormalisedTriadicCensus())    
-        print(baseNetwork.getNormalisedTriadicCensus())       
-        print(self.netProperties.avgTriC)      
+            print("Triadic census") 
+            print(gold_standard.getNormalisedTriadicCensus())    
+            print(baseNetwork.getNormalisedTriadicCensus())       
+            print(self.netProperties.avgTriC)      
 
-        print("Edge probability")    
-        print(gold_standard.getEdgeProb())    
-        print(baseNetwork.getEdgeProb())       
-        print(self.netProperties.expEdgeProb)  
+            print("Edge probability")    
+            print(gold_standard.getEdgeProb())    
+            print(baseNetwork.getEdgeProb())       
+            print(self.netProperties.expEdgeProb)  
 
-        print(baseNetwork.getAdjacencyMatrix())         
+            print(baseNetwork.getAdjacencyMatrix())         
 
         return distances, metrics, baseMetrics          
 
@@ -1271,7 +1303,7 @@ class ContextSpecificDecoder:
 
     #infer putative regulatory probability estimates 
     def getRegulatoryWeights(self, method="dynGENIE3", **method_args):  
-        supportedMethods = ["dynGENIE3", "inferelator"]   
+        supportedMethods = ["dynGENIE3", "inferelator"]    
 
         #set experiment count
         self.timeSeriesDf["Experiment"] = 0  
@@ -1317,11 +1349,10 @@ class ContextSpecificDecoder:
 
         #probabilites are normalised column-wise   
         regulatory_probs, _, _, _, _ = dynGENIE3(TS_data, time_points, **method_args) 
-        print(regulatory_probs)  
-        return regulatory_probs   
+        return regulatory_probs    
     
     def run_inferelator(self, **method_args): 
-        return None  
+        return None
         """
         worker = inferelator_workflow(regression="bbsr", workflow="tfa")         
         worker.set_run_parameters(num_bootstraps=5, random_seed=42) 
@@ -1394,9 +1425,13 @@ class ContextSpecificDecoder:
         
         network_result = worker.run()      
         regulatory_probs = network_result.combined_confidences  
-        return regulatory_probs.to_numpy()            
-        """
+        regulatory_probs = regulatory_probs.to_numpy()  
+        max_value = regulatory_probs.max()
+        regulatory_probs = regulatory_probs + (1 - max_value)/2.0    
+        print(regulatory_probs) 
 
+        return regulatory_probs            
+        """    
 
 
 
