@@ -429,7 +429,6 @@ class GeneticSolver:
             popList.append(self.generate_subject()) 
         return popList
     
-    
     def generateRandomAdj(self):
         return np.random.randint(2, size=(self.nNodes, self.nNodes))              
 
