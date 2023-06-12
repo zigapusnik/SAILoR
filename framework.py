@@ -3,6 +3,7 @@ from deap import creator, base, tools, algorithms
 #from inferelator import inferelator_workflow 
 from sklearn.cluster import KMeans  
 from qm import QuineMcCluskey  
+from triadic_census import count_triads, count_local_triads   
 
 import csv
 import networkx as nx
@@ -15,88 +16,128 @@ import pandas as pd
 import pickle 
 import sklearn.metrics as metrics 
 import sys  
-import time      
+import time         
 
-class Network:   
+class Network:     
     #nNodes ... network size
     #adjM ... np.array representing adjacency matrix
-    #prevAdjM ... previous adjacency matrix
     #refFile ... file path to reference network  
     #geneIndices ... dictionary - mapping gene names to indices of adjacency matrix
     #geneNames ... dictionary - mapping from adj indices to gene names   
     def __init__(self, nNodes=0, adjM=None, refFile = None, geneIndices = None, geneNames = None):
         self.nNodes = nNodes 
         self.adjM = None 
-        self.prevAdjM = None
         self.geneIndices = geneIndices  
         self.geneNames = geneNames   
         self.triadicCensus = None 
-        self.prevTriadicCensus = None
         self.normalisedTriC = None
-        self.prevNormTriC = None     
-        self.nxG = None
-        self.prevnxG = None  
+        self.nxG = None 
 
         if refFile is not None: 
             self.constructReferenceNetwork(refFile, geneIndices, geneNames)        
 
         if adjM is not None:
-            self.setAdjacencyMatrix(adjM)   
+            self.setAdjacencyMatrix(adjM)  
+            self.setTriadicCensus()    
 
     #set number of nodes
     def setnNodes(self, nNodes):
         self.nNodes = nNodes  
 
+    def normaliseTriadicCensus(self):
+        #normalise triadic census   
+        sumT = np.sum(self.triadicCensus) 
+        if sumT > 0: 
+            self.normalisedTriC = self.triadicCensus/np.sum(self.triadicCensus)           
+        else: 
+            self.normalisedTriC = self.triadicCensus               
+
+    #sets triadic census count and orbit count for each node
     def setTriadicCensus(self, debug = False):
         start = time.time()     
-        self.triadicCensus = self.countTriads()
-        end = time.time()  
-        elapsed = end - start  
-        if debug:    
-            print(f"Counting triads: {elapsed} seconds elapsed!")         
-        #remove first three triades with multiple connected components     
-        #triNames = ["003", "012", "102", "021D", "021U", "021C", "111D", "111U", "030T", "030C", "201", "120D", "120U", "120C", "210", "300"] 
-        triNames = ["021D", "021U", "021C", "111D", "111U", "030T", "030C", "201", "120D", "120U", "120C", "210", "300"]  
-        self.triadicCensus = np.array([self.triadicCensus[key] for key in triNames])    
+        self.triadicCensus, self.triad_pair_count = self.countTriads()      
+        end = time.time()     
+        elapsed = end - start     
+        if debug:      
+            print(f"Counting triads: {elapsed} seconds elapsed!")             
         
-        #normalise triadic census  
-        sumT = np.sum(self.triadicCensus) 
-        if sumT > 0:
-            self.normalisedTriC = self.triadicCensus/np.sum(self.triadicCensus)           
-        else:
-            self.normalisedTriC = self.triadicCensus   
+        self.normaliseTriadicCensus()  
+  
 
-    def setAdjacencyMatrix(self, adjM):
-        self.adjM = adjM
+    def setAdjacencyMatrix(self, adjM): 
+        self.adjM = adjM 
         self.setGraph()   
-        self.setTriadicCensus()    
+  
 
-    def setNewAdjacencyMatrix(self, adj):
-        self.prevAdjM = self.adjM
-        self.prevnxG = self.nxG
-        self.prevTriadicCensus = self.triadicCensus 
-        self.prevNormTriC =  self.normalisedTriC  
-        self.setAdjacencyMatrix(adj)    
+    def updateTriadicCensus(self): 
+        adj = self.adjM     
+        #get nodes with different edges    
+        a, b = self.diff_a, self.diff_b      
+        if a != b:       
+            subgraph_nodes = set()    
+            #get node a and b neighbourhood
+            neighbours_a = nx.all_neighbors(self.nxG, a)    
+            neighbours_b = nx.all_neighbors(self.nxG, b)     
+            
+            subgraph_nodes.update(neighbours_a)  
 
+            if adj[a,b] == 1 or adj[b,a] == 1:
+                #union of all neigbours
+                subgraph_nodes.update(neighbours_b)  
+            else:
+                #intersect of all neighbours
+                subgraph_nodes = subgraph_nodes.intersection(neighbours_b) 
+
+            #remove self loops 
+            if a in subgraph_nodes:
+                subgraph_nodes.remove(a)
+            if b in subgraph_nodes:
+                subgraph_nodes.remove(b) 
+
+            #update triadic census:   
+            triad_pair_count = self.countLocalTriads(a,b,subgraph_nodes)             
+            triad_pair_count_diff = triad_pair_count  - self.triad_pair_count[a,b,:] - self.triad_pair_count[b,a,:]    
+
+            #set values for triangular indices    
+            self.triad_pair_count[a,b,:] = 0         
+            self.triad_pair_count[b,a,:] = triad_pair_count           
+            
+            self.triadicCensus = self.triadicCensus + triad_pair_count_diff[3:]      
+                
+            self.normaliseTriadicCensus()           
+
+            """
+            countTri, _ = self.countTriads() 
+            if np.abs(np.sum(countTri - self.triadicCensus) > 0): 
+                print("Error")   
+                print(countTri - self.triadicCensus)     
+            """   
+                
     #create networkx graph representation
     def setGraph(self):
         if self.adjM is not None:
             self.nxG = nx.from_numpy_array(self.adjM, create_using=nx.DiGraph)  
 
-    def countTriads(self):  
+    def countTriads(self):    
         if self.nxG is not None:
-            return nx.triadic_census(self.nxG)
-        else:
+            return count_triads(self.nxG)     
+        else: 
             return None    
+        
+    def countLocalTriads(self, v, u, nodelist):
+        if self.nxG is not None:
+            return count_local_triads(self.nxG, v, u, nodelist)   
+        else: 
+            return None             
 
     def getTriadicCensus(self):
-        return self.triadicCensus
+        return self.triadicCensus 
     
     def getNormalisedTriadicCensus(self):
-        return self.normalisedTriC 
+        return self.normalisedTriC  
 
-    def getAdjacencyMatrix(self):
-        return self.adjM 
+    def getAdjacencyMatrix(self): 
+        return self.adjM  
     
     #returns distribution of nodes in-degrees
     def getInDegs(self, maxRegs):
@@ -172,6 +213,8 @@ class Network:
             print(f"Error while reading {file}!")
         
         self.setAdjacencyMatrix(adj_matrix)  
+        self.setTriadicCensus()  
+        
         self.geneIndices = geneIndices
         self.geneNames = geneNames  
         self.nNodes = (self.adjM.shape)[0]     	
@@ -201,7 +244,7 @@ class GeneticSolver:
         self.plotPopulationPerGeneration = False                                         
 
         self.initialPop = [3, 5]      
-        self.initialPopProb = [0.99, 0.01]                                                                                                        
+        self.initialPopProb = [0.99, 0.01]                                                                                                         
         #self.initialPop ... modes of generating initial population    
         #0 ... random (equal probability for ede/non-edge)
         #1 ... random (by folowing distribution of number of regulators)
@@ -213,11 +256,11 @@ class GeneticSolver:
         #7 ... extracted from reference networks
         #list of modes ... each subject is generated with randomly selected mode     
                  
-        #create multiobjective fitness to maximize objective (1) and minimize it (-1) 
-        creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))       
-        creator.create("Individual", Network, fitness=creator.FitnessMulti)      
+        #create multiobjective fitness to maximize objective (1) and minimize it (-1)  
+        creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))         
+        creator.create("Individual", Network, fitness=creator.FitnessMulti)       
 
-        toolbox = base.Toolbox()      
+        toolbox = base.Toolbox()        
         toolbox.register("individual", self.generate_subject)
         toolbox.register("population", self.generate_population)
         toolbox.register("evaluate", self.eval_subject)  
@@ -388,7 +431,7 @@ class GeneticSolver:
     
     
     def generateRandomAdj(self):
-        return np.random.randint(2, size=(self.nNodes, self.nNodes))             
+        return np.random.randint(2, size=(self.nNodes, self.nNodes))              
 
     def generateTopRegulationsAdj(self, stochasticEdgeNumber = True): 
         netProperties = self.netProperties
@@ -550,12 +593,31 @@ class GeneticSolver:
         ind = creator.Individual(Network()) 
         ind.setnNodes(self.nNodes) 
         #set adjacency matrix and calculate necesssary properties   
-        ind.setAdjacencyMatrix(self.generateInitialAdjMatrix(mode))    
-        return ind   
+        ind.setAdjacencyMatrix(self.generateInitialAdjMatrix(mode)) 
+        ind.setTriadicCensus()       
+        return ind    
 
     #mutate subject by addition or deletion of edges  
-    def mutation(self, sub):    
-        adjM = sub.getAdjacencyMatrix()          
+    def mutation(self, sub):     
+        adjM = sub.getAdjacencyMatrix()   
+
+        """   
+        #flip bits in adjacency matrix with predefined probability
+        mutationMatrix = (rndVals < self.mutM).astype(int)     
+        newAdjM = np.absolute(sub.getAdjacencyMatrix() - mutationMatrix) 
+        """       
+
+        """
+        #flip ones in ajdacency matrix with probability p1 and zeros with probability p2 to approximately preserve number of edges  
+        rndVals = np.random.rand(self.nNodes, self.nNodes)
+        adjM = sub.getAdjacencyMatrix()  
+
+        indOnes = np.where(adjM == 1)   
+        indZeros = np.where(adjM == 0)   
+
+        adjM[indOnes] = (rndVals[indOnes] > self.p1).astype(int)         
+        adjM[indZeros] = (rndVals[indZeros] < self.p2).astype(int)    
+        """          
 
         #add edge or remove edge with same probability 
         add_edge = True
@@ -568,59 +630,38 @@ class GeneticSolver:
         row = indices[0][ind_num]  
         column = indices[1][ind_num]   
 
-        adjM[row, column] = int(add_edge) 
+        adjM[row, column] = int(add_edge)   
 
         #limit number of regulators   
         maxRegs = self.netProperties.maxRegs    
         if np.sum(adjM[:, column]) > maxRegs:  
-            adjM[row, column] = 0            
+            adjM[row, column] = 0              
 
+        sub.diff_a = row 
+        sub.diff_b = column    
+        sub.updateTriadicCensus()                
         
-        """ 
-        #flip bits in adjacency matrix with predefined probability
-        mutationMatrix = (rndVals < self.mutM).astype(int)     
-        newAdjM = np.absolute(sub.getAdjacencyMatrix() - mutationMatrix) 
-        """
-
-        """
-        #flip ones in ajdacency matrix with probability p1 and zeros with probability p2 to approximately preserve number of edges  
-        rndVals = np.random.rand(self.nNodes, self.nNodes)
-        adjM = sub.getAdjacencyMatrix()  
-
-        indOnes = np.where(adjM == 1)   
-        indZeros = np.where(adjM == 0)   
-
-        adjM[indOnes] = (rndVals[indOnes] > self.p1).astype(int)         
-        adjM[indZeros] = (rndVals[indZeros] < self.p2).astype(int)    
-        """   
-        
-        sub.setNewAdjacencyMatrix(adjM)       
-        return sub,  
+        return sub,    
     
     #apply a crossover by swaping columns (regulators) in adjacency matrix #and rows    
     def crossover(self, sub1, sub2):   
-        nNodes = self.nNodes    
-        #cxNum1 = np.random.randint(1, nNodes)          
-        cxNum2 = np.random.randint(1, nNodes)    
+        nNodes = self.nNodes             
+        cxNum = np.random.randint(1, nNodes)      
+        crossColumns = np.random.choice(nNodes, cxNum, replace=False)       
 
-        #crossRows = np.random.choice(nNodes, cxNum1, replace=False) 
-        crossColumns = np.random.choice(nNodes, cxNum2, replace=False)      
+        adjSub1 = sub1.getAdjacencyMatrix()      
+        adjSub2 = sub2.getAdjacencyMatrix()       
 
-        adjSub1 = sub1.getAdjacencyMatrix()    
-        adjSub2 = sub2.getAdjacencyMatrix()   
-
-        #tmpRows = adjSub1[crossRows, :]
-        #adjSub1[crossRows, :] = adjSub2[crossRows, :]
-        #adjSub2[crossRows, :] = tmpRows 
-
-        tmpCols = adjSub1[:, crossColumns] 
+        tmpCols = adjSub1[:, crossColumns]  
         adjSub1[:, crossColumns] = adjSub2[:, crossColumns]        
-        adjSub2[:, crossColumns] = tmpCols  
+        adjSub2[:, crossColumns] = tmpCols    
 
-        sub1.setNewAdjacencyMatrix(adjSub1)
-        sub2.setNewAdjacencyMatrix(adjSub2)    
+        sub1.setGraph()     
+        sub1.setTriadicCensus()  
+        sub2.setGraph()         
+        sub2.setTriadicCensus()     
 
-        return sub1, sub2
+        return sub1, sub2   
 
 def getGoldNetwork(goldpath, geneIndices, geneNames):
     net = Network(refFile = goldpath, geneIndices = geneIndices, geneNames = geneNames)    
@@ -782,7 +823,7 @@ def getUniqueSubjects(subjects):
 
     for subject in subjects:
         adj = subject.getAdjacencyMatrix() 
-        adj_byte_array = adj.tobytes() 
+        adj_byte_array = adj.tobytes()   
 
         if adj_byte_array not in unique_subjects_set:
             unique_subjects.append(subject)

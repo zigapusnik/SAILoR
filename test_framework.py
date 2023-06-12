@@ -17,7 +17,7 @@ def parameter_sweep():
 
         #draw samples from uniform distribution      
         w1 = np.random.uniform()   
-        w2 = np.random.uniform()
+        w2 = np.random.uniform() 
         w3 = np.random.uniform()
         w4 = np.random.uniform()   
 
@@ -32,12 +32,12 @@ def parameter_sweep():
 
 def main(obj2Weights = None):   
     subfolder = "EcoliExtractedNetworks" #"EcoliExtractedNetworks" #"DREAM4"               
-    net_nums = [4] #range(1,11)            
-    net_size = 16 #16 #32 #64    
-    net_sizes = [16]                                           
+    net_nums = [2] #range(1,11)            
+    net_size = 64 #16 #32 #64    
+    net_sizes = [64]                                                       
     
-    imprvs = {}                     
-    dstcs = {}                    
+    imprvs = {}                      
+    dstcs = {}                     
     mtrcs = {}           
     base = {}            
 
@@ -70,10 +70,13 @@ def main(obj2Weights = None):
     folder = os.path.join(".", "results", subfolder + "_" + str(net_size) + parameter_substring)         
 
     #create directory if does not exists     
+    """
     if not os.path.exists(folder):  
         os.makedirs(folder)    
     with open(os.path.join(folder, "dump_results.pkl"), "wb") as file:       
         pickle.dump((dstcs, mtrcs, base, imprvs), file)                
+    """ 
+        
 
 def getPaths(net_num, net_size, net_sizes, subfolder):     
     steadyStatesPaths = [] 
