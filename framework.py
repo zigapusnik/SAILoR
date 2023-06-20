@@ -25,13 +25,17 @@ class Network:
     #geneIndices ... dictionary - mapping gene names to indices of adjacency matrix
     #geneNames ... dictionary - mapping from adj indices to gene names   
     def __init__(self, nNodes=0, adjM=None, refFile = None, geneIndices = None, geneNames = None):
-        self.nNodes = nNodes 
+        self.nNodes = nNodes
         self.adjM = None 
         self.geneIndices = geneIndices  
         self.geneNames = geneNames   
         self.triadicCensus = None 
-        self.normalisedTriC = None
+        self.normalisedTriC = None 
         self.nxG = None 
+        self.edge_prob = None  
+        self.out_degs_dist = None  
+        self.in_degs_dist = None 
+        self.in_nums = None     
 
         if refFile is not None: 
             self.constructReferenceNetwork(refFile, geneIndices, geneNames)        
@@ -43,6 +47,10 @@ class Network:
     #set number of nodes
     def setnNodes(self, nNodes):
         self.nNodes = nNodes  
+        self.nNodesSquared = nNodes*nNodes
+
+    def setMaxRegs(self, maxRegs):
+        self.maxRegs = maxRegs   
 
     def normaliseTriadicCensus(self):
         #normalise triadic census   
@@ -104,7 +112,7 @@ class Network:
             
             self.triadicCensus = self.triadicCensus + triad_pair_count_diff[3:]      
                 
-            self.normaliseTriadicCensus()           
+            self.normaliseTriadicCensus()            
 
             """
             countTri, _ = self.countTriads() 
@@ -139,35 +147,87 @@ class Network:
     def getAdjacencyMatrix(self): 
         return self.adjM  
     
-    #returns distribution of nodes in-degrees
-    def getInDegs(self, maxRegs):
+    def setInDegs(self):
+        maxRegs = self.maxRegs 
         inDegs = np.zeros(maxRegs + 1)
-        if self.adjM is not None:
-            inNums = np.sum(self.adjM, axis=0).astype(int)       
-            inNums[inNums > maxRegs] = maxRegs 
+        if self.adjM is not None: 
 
+            inNums = self.in_nums
+            if inNums is None:    
+                inNums = np.sum(self.adjM, axis=0).astype(int)                       
+                inNums[inNums > maxRegs] = maxRegs  
+                self.in_nums = inNums
+                
             for inNum in inNums:
-                inDegs[inNum] += 1
-
-        totalIn = np.sum(inDegs)
-        return inDegs/totalIn    
+                inDegs[inNum] += 1     
+        
+        self.in_degs = inDegs
+        self.in_degs_dist = inDegs/self.nNodes         
     
-    #returns distribution of nodes out-degrees
-    def getOutDegs(self, maxRegulates):
+    def updateInDegs(self, diff_b, edge_diff):  
+        b_deg_before = self.in_nums[diff_b] 
+        b_deg_after = b_deg_before + edge_diff 
+
+        #update node in degree
+        self.in_nums[diff_b] = b_deg_after  
+
+        self.in_degs[b_deg_before] = self.in_degs[b_deg_before] - 1   
+        self.in_degs[b_deg_after] = self.in_degs[b_deg_after] + 1    
+
+        self.in_degs_dist = self.in_degs/self.nNodes   
+
+    #returns distribution of nodes in-degrees
+    def getInDegs(self):   
+        if self.in_degs_dist is None:
+            self.setInDegs()
+        return self.in_degs_dist 
+    
+    def setOutDegs(self):  
+        maxRegulates = self.maxRegs
         outDegs = np.zeros(maxRegulates + 1) 
         if self.adjM is not None: 
             outNums = np.sum(self.adjM, axis=1).astype(int)       
             outNums[outNums > maxRegulates] = maxRegulates 
+            self.out_nums = outNums   
 
             for outNum in outNums:
                 outDegs[outNum] += 1
 
-        totalOut = np.sum(outDegs)
-        return outDegs/totalOut      
+        self.out_degs = outDegs 
+        self.out_degs_dist = outDegs/self.nNodes   
 
-    #returns edge probability between two nodes 
-    def getEdgeProb(self): 
-        return np.sum(self.adjM)/(self.nNodes*self.nNodes)       
+        return self.out_degs_dist  
+
+    def updateOutDegs(self, diff_a, edge_diff):   
+        a_deg_before = self.out_nums[diff_a]  
+        a_deg_after = a_deg_before + edge_diff    
+
+        self.out_degs[a_deg_before] = self.out_degs[a_deg_before] - 1    
+        self.out_degs[a_deg_after] = self.out_degs[a_deg_after] + 1   
+
+        self.out_degs_dist = self.out_degs/self.nNodes      
+
+    #returns distribution of nodes out-degrees
+    def getOutDegs(self):
+        if self.out_degs_dist is None: 
+            self.setOutDegs() 
+        return self.out_degs_dist  
+
+    #set edge probability 
+    def setEdgeProb(self): 
+        self.sum_adj = np.sum(self.adjM)       
+        self.edge_prob = self.sum_adj/self.nNodesSquared        
+
+    #update edge probability       
+    def updateEdgeProb(self, edge_diff):           
+        self.sum_adj = self.sum_adj + edge_diff        
+        self.edge_prob = self.sum_adj/self.nNodesSquared          
+
+    #returns edge probability between two nodes  
+    def getEdgeProb(self):  
+        if self.edge_prob is None: 
+            self.setEdgeProb() 
+        return self.edge_prob   
     
     #construct adjacency matrix based on provided reference file	   
     def constructReferenceNetwork(self, file, geneIndices, geneNames):  
@@ -217,7 +277,8 @@ class Network:
         
         self.geneIndices = geneIndices
         self.geneNames = geneNames  
-        self.nNodes = (self.adjM.shape)[0]     	
+        self.nNodes = (self.adjM.shape)[0]   
+        self.nNodesSquared = self.nNodes *self.nNodes  	
 
 
 
@@ -233,6 +294,7 @@ class GeneticSolver:
         
         self.netProperties = networkProperties     
         self.nNodes = self.netProperties.nNodes   
+        self.nNodesSquared = self.nNodes*self.nNodes 
 
         self.obj2Weights = obj2Weights  
         
@@ -338,22 +400,22 @@ class GeneticSolver:
 
     def eval_subject(self, subject, debug = False):     
         netProperties = self.netProperties  
-        #in-degree distribution
-        avgInDegs = netProperties.avgInDegs
-        #out-degree distribution   
-        avgOutDegs = netProperties.avgOutDegs    
+        #in-degree distribution    
+        avgInDegs = netProperties.avgInDegs 
+        #out-degree distribution    
+        avgOutDegs = netProperties.avgOutDegs     
 
         #regWeights = netProperties.regWeights   
         #favorize less sparsely connected networks  
         expEdgeProb = 1*netProperties.expEdgeProb  
         avgTriC = netProperties.avgTriC   
         maxRegs = netProperties.maxRegs 
-        rankedDictionary  = netProperties.rankedDictionary        
+        rankedDictionary = netProperties.rankedDictionary        
 
         adjM = subject.getAdjacencyMatrix()    
         indcs0 = np.where(adjM == 0)
         indcs1 = np.where(adjM == 1)  
-        nCon = self.nNodes*self.nNodes    
+        nCon = self.nNodesSquared     
 
         nonRegulations = len(indcs0[0])  
         regulations = len(indcs1[0])       
@@ -376,12 +438,12 @@ class GeneticSolver:
             obj2Weights = np.array([0.25, 0.25, 0.25, 0.25])                          
 
         #cost functions based on comparison of distributions are based on overlap score     
-        outDegDist = subject.getOutDegs(maxRegs)     
+        outDegDist = subject.getOutDegs()          
         outDegOverlap = np.minimum(avgOutDegs, outDegDist)
         outDegCost = 1 - np.sum(outDegOverlap)    
         obj2List.append(outDegCost)       
 
-        inDegDist = subject.getInDegs(maxRegs)     
+        inDegDist = subject.getInDegs()     
         inDegOverlap = np.minimum(avgInDegs, inDegDist)    
         inDegCost = 1 - np.sum(inDegOverlap)           
         obj2List.append(inDegCost)               
@@ -391,14 +453,15 @@ class GeneticSolver:
         triCost = 1 - np.sum(triOverlap)      
         obj2List.append(triCost)         
 
-        eProb = subject.getEdgeProb() 
+        eProb = subject.getEdgeProb()   
+
         eProbCost = np.abs(expEdgeProb - eProb)
-        if eProb < expEdgeProb:       
+        if eProb < expEdgeProb:        
             eProbCost = eProbCost/expEdgeProb 
-        else: 
+        else:  
             eProbCost = eProbCost/(1 - expEdgeProb)      
                
-        obj2List.append(eProbCost)                           
+        obj2List.append(eProbCost)                            
 
         obj2List = np.array(obj2List)                    
         obj2 = np.dot(obj2Weights, obj2List) 
@@ -589,12 +652,14 @@ class GeneticSolver:
         if isinstance(mode, list): 
             mode = np.random.choice(mode, p = self.initialPopProb)    
 
-        ind = creator.Individual(Network()) 
+        ind = creator.Individual(Network) #Individual inherits all properties of Network   
         ind.setnNodes(self.nNodes) 
         #set adjacency matrix and calculate necesssary properties   
         ind.setAdjacencyMatrix(self.generateInitialAdjMatrix(mode)) 
-        ind.setTriadicCensus()       
-        return ind    
+        ind.setTriadicCensus()  
+        ind.setMaxRegs(self.netProperties.maxRegs)    
+        ind.setInDegs()     
+        return ind      
 
     #mutate subject by addition or deletion of edges  
     def mutation(self, sub):     
@@ -620,9 +685,11 @@ class GeneticSolver:
 
         #add edge or remove edge with same probability 
         add_edge = True
+        edge_diff = 1
         rnd = np.random.rand()  
         if rnd < 0.5:
-            add_edge = False    
+            add_edge = False
+            edge_diff = -1      
 
         indices = np.where(adjM == int(not add_edge))  
         ind_num = np.random.choice(len(indices[0]))            
@@ -634,15 +701,22 @@ class GeneticSolver:
         #limit number of regulators   
         maxRegs = self.netProperties.maxRegs    
         if np.sum(adjM[:, column]) > maxRegs:  
-            adjM[row, column] = 0              
+            adjM[row, column] = 0        
 
-        sub.diff_a = row 
-        sub.diff_b = column    
-        sub.updateTriadicCensus()                
-        
+        else:      
+            #dynamically update topological properties   
+            sub.updateEdgeProb(edge_diff)
+            sub.updateOutDegs(row, edge_diff) 
+            sub.updateInDegs(column, edge_diff)              
+            sub.diff_a = row   
+            sub.diff_b = column    
+            sub.updateTriadicCensus()                    
+
         return sub,    
     
     #apply a crossover by swaping columns (regulators) in adjacency matrix #and rows    
+    #The general rule for crossover operators is that they only mate individuals, this means that an independent copies must be made prior 
+    #to mating the individuals if the original individuals have to be kept or are references to other individuals (see the selection operator).
     def crossover(self, sub1, sub2):   
         nNodes = self.nNodes             
         cxNum = np.random.randint(1, nNodes)      
@@ -659,6 +733,32 @@ class GeneticSolver:
         sub1.setTriadicCensus()  
         sub2.setGraph()         
         sub2.setTriadicCensus()     
+
+        sub1.setEdgeProb() 
+        sub2.setEdgeProb()    
+
+        sub1.setOutDegs()
+        sub2.setOutDegs()      
+
+        #print("Cross columns are")
+        #print(crossColumns) 
+        #print("Before")
+        #print(sub1.in_nums)
+        #print(sub2.in_nums) 
+        tmp_nums = sub1.in_nums[crossColumns] 
+        sub1.in_nums[crossColumns] = sub2.in_nums[crossColumns]  
+        sub2.in_nums[crossColumns] = tmp_nums 
+        #print("After")
+        #print(sub1.in_nums)
+        #print(sub2.in_nums)  
+
+        if np.sum(sub1.adjM - adjSub1) != 0 or np.sum(sub2.adjM - adjSub2) != 0: 
+            print("Difference in numpy matrices is")
+            print(np.sum(sub1.adjM - adjSub1))  
+            print(np.sum(sub2.adjM - adjSub2))    
+
+        sub1.setInDegs()      
+        sub2.setInDegs()          
 
         return sub1, sub2   
 
@@ -783,7 +883,7 @@ class NetworkProperties:
     def getAvgInDegs(self):
         avgInDegs = np.zeros(self.maxRegs + 1)
         for refNet in self.referenceNets:
-             avgInDegs = avgInDegs + refNet.getInDegs(self.maxRegs) 
+             avgInDegs = avgInDegs + refNet.getInDegs() 
 
         inSum = np.sum(avgInDegs)   
         return avgInDegs/inSum   
@@ -791,7 +891,7 @@ class NetworkProperties:
     def getAvgOutDegs(self):   
         avgOutDegs = np.zeros(self.maxRegs + 1)
         for refNet in self.referenceNets: 
-             avgOutDegs = avgOutDegs + refNet.getOutDegs(self.maxRegs)     
+             avgOutDegs = avgOutDegs + refNet.getOutDegs()       
 
         outSum = np.sum(avgOutDegs)   
         return avgOutDegs/outSum    
@@ -886,7 +986,7 @@ class ContextSpecificDecoder:
                 regWeights = pickle.load(file)         
         """
 
-        referenceNets = self.getReferenceNetworks(referenceNetPaths)             
+        referenceNets = self.getReferenceNetworks(referenceNetPaths, maxRegs)                 
         netProperties = NetworkProperties(referenceNets, regWeights, nNodes, self.geneIndices, self.geneNames, maxRegs = maxRegs)      
         self.netProperties = netProperties 
 
@@ -895,8 +995,8 @@ class ContextSpecificDecoder:
             plt.show()       
 
         use_xor = False  
-        self.qm = QuineMcCluskey(use_xor = use_xor)
-        self.genSolver = GeneticSolver(netProperties, obj2Weights=obj2Weights)                        
+        self.qm = QuineMcCluskey(use_xor = use_xor) 
+        self.genSolver = GeneticSolver(netProperties, obj2Weights=obj2Weights)                          
 
     def test(self, subjects, debug = False):   
         
@@ -931,13 +1031,13 @@ class ContextSpecificDecoder:
         
         if debug:
             print("Regulates degrees") 
-            print(gold_standard.getOutDegs(self.netProperties.maxRegs))  
-            print(baseNetwork.getOutDegs(self.netProperties.maxRegs))    
+            print(gold_standard.getOutDegs())  
+            print(baseNetwork.getOutDegs())     
             print(self.netProperties.avgOutDegs)   
 
             print("Regulatory degrees") 
-            print(gold_standard.getInDegs(self.netProperties.maxRegs))  
-            print(baseNetwork.getInDegs(self.netProperties.maxRegs))    
+            print(gold_standard.getInDegs())  
+            print(baseNetwork.getInDegs())    
             print(self.netProperties.avgInDegs)    
 
             print("Triadic census") 
@@ -1321,7 +1421,7 @@ class ContextSpecificDecoder:
 
         return best            
 
-    def readFiles(self, filePaths):
+    def readFiles(self, filePaths): 
         df_all = pd.DataFrame() 
         for filePath in filePaths:
             if os.path.exists(filePath):   
@@ -1333,13 +1433,14 @@ class ContextSpecificDecoder:
                 print(f"Unable to read file {filePath}. File does not exists!")  
         return df_all
 
-    def getReferenceNetworks(self, referenceNetPaths):
+    def getReferenceNetworks(self, referenceNetPaths, maxRegs):
         reference_nets = [] 
         for refPath in referenceNetPaths:
             reference_net = Network(refFile = refPath)
+            reference_net.setMaxRegs(maxRegs)  
             if reference_net.adjM is not None:
                 reference_nets.append(reference_net) 
-        return reference_nets    
+        return reference_nets       
 
     #infer putative regulatory probability estimates 
     def getRegulatoryWeights(self, method="dynGENIE3", **method_args):  

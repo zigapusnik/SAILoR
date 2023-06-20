@@ -33,8 +33,8 @@ def parameter_sweep():
 def main(obj2Weights = None):   
     subfolder = "EcoliExtractedNetworks" #"EcoliExtractedNetworks" #"DREAM4"               
     net_nums = [2] #range(1,11)            
-    net_size = 64 #16 #32 #64    
-    net_sizes = [64]                                                       
+    net_size = 16 #16 #32 #64    
+    net_sizes = [16]                                                        
     
     imprvs = {}                      
     dstcs = {}                     
