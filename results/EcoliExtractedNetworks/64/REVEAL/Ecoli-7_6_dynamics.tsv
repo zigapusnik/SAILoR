@@ -1,0 +1,4 @@
+Gene44 = not Gene1 and not Gene51
+Gene64 = Gene42 and not Gene45 and Gene63
+Gene32 = Gene24 and Gene47
+Gene19 = not Gene48 and Gene54 and Gene57

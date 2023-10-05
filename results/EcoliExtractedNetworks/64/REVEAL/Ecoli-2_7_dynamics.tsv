@@ -1,0 +1,2 @@
+Gene38 = Gene34 and not Gene64
+Gene5 = Gene5 or Gene39 and Gene61

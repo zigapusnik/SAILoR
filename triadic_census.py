@@ -1,3 +1,16 @@
+###################################################################
+#### part of SAILoR (Structure-Aware Inference of Logic Rules) ####
+################################################################### 
+
+#Copyright 2023 Žiga Pušnik   
+
+#Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+#The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+#THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
 import networkx as nx 
 import numpy as np  
 
@@ -6,9 +19,9 @@ tri_types = [ 1, 2, 2, 4, 2, 3, 6, 8, 2, 6, 5, 9, 4, 8, 9, 13, 2, 6, 3, 8, 5, 7,
 
 #modified triadic census algorithm for orbit count inspired by Ortmann and Brandes, 2017 
 #based on Batagelj and Mrvar, 2000  
-#calculates orbit count and triadic census of a graph 
+#calculates triadic census of a simple directed graph    
 def count_triads(G):   
-    #G ... networkx directed graph (digraph)    
+    #G ... networkx directed graph (digraph)     
     #nodelist ... list of considered nodes, if not provided, consider all nodes in G
 
         
@@ -64,11 +77,12 @@ def count_triads(G):
                 #orbit_count[u, o_u] = orbit_count[u, o_u] + 1  
                 #orbit_count[w, o_w] = orbit_count[w, o_w] + 1    
 
-    #ignore first three triades with multiple connected components           
+    #ignore first three triads with multiple connected components           
     return census[3:], triad_pair_count     
 
 
 #if u and v are connected subgraphs nodes is union of all neighbours else subgraph nodes is intersect of all neighbours 
+#intersect and union operation is handled prior to calling count_local_triads
 def count_local_triads(G, v, u, subgraph_nodes):
     triad_pair_count = np.zeros(16)  
 

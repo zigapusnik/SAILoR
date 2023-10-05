@@ -1,0 +1,3 @@
+Gene44 = not Gene10 and Gene32 or Gene10 and Gene44 or Gene32 and Gene44
+Gene9 = Gene30 and Gene35
+Gene15 = not Gene19 and Gene38 and not Gene52

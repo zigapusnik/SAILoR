@@ -1,0 +1,16 @@
+Gene1 = not Gene6
+Gene2 = Gene16 or not Gene1
+Gene3 = Gene14
+Gene4 = Gene5 or Gene6
+Gene5 = not Gene6
+Gene6 = not Gene1 and not Gene5
+Gene7 = Gene14
+Gene8 = 0
+Gene9 = 0
+Gene10 = 1
+Gene11 = Gene5
+Gene12 = Gene14
+Gene13 = Gene16
+Gene14 = Gene7 or Gene12
+Gene15 = 0
+Gene16 = 1

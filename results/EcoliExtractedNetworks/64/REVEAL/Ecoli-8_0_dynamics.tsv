@@ -1,0 +1,5 @@
+Gene1 = Gene1 and Gene6 or Gene1 and Gene7
+Gene21 = Gene2 and not Gene49
+Gene52 = Gene16 and Gene9
+Gene31 = Gene1 and Gene6 or Gene1 and Gene7
+Gene61 = Gene27 and Gene41 or Gene41 and Gene6

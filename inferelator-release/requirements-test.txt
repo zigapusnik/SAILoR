@@ -1,4 +1,0 @@
-coverage
-pytest
-bio-test-artifacts
-tables

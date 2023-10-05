@@ -1,0 +1,16 @@
+Gene1 = Gene1&!Gene9 || !Gene7
+Gene2 = !Gene5 || Gene6&Gene10 || !Gene6&!Gene10 || Gene3
+Gene3 = Gene14
+Gene4 = Gene9&!Gene2 || !Gene3
+Gene5 = Gene14&Gene16
+Gene6 = Gene3 || !Gene9 || !Gene1&!Gene11 || Gene5&Gene9&Gene16
+Gene7 = Gene7
+Gene8 = Gene2&Gene3&Gene4&Gene11&!Gene9&!Gene15
+Gene9 = Gene9 || Gene15&!Gene1
+Gene10 = Gene10
+Gene11 = Gene14&Gene16
+Gene12 = Gene12&Gene16&!Gene14
+Gene13 = Gene5&Gene7&!Gene1&!Gene2&!Gene12
+Gene14 = Gene14&!Gene10
+Gene15 = Gene15&!Gene14
+Gene16 = Gene12

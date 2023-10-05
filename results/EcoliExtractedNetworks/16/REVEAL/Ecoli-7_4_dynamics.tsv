@@ -1,0 +1,2 @@
+Gene12 = Gene12 and Gene5 or Gene12 and not Gene8 or Gene5 and Gene8
+Gene13 = not Gene11 and Gene13 or Gene13 and not Gene4

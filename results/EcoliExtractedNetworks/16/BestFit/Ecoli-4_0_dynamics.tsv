@@ -1,0 +1,16 @@
+Gene8 = Gene6 and Gene8 or Gene7 and Gene8
+Gene9 = Gene16 and not Gene4 or Gene16 and Gene9 or not Gene4 and Gene9
+Gene1 = not Gene14 and Gene6 and Gene8 or Gene14 and not Gene6
+Gene2 = not Gene14 and Gene2 or not Gene14 and Gene4 or Gene2 and not Gene4
+Gene3 = Gene3 and not Gene5 or Gene3 and not Gene6 or not Gene5 and Gene6
+Gene4 = Gene12 and Gene4 or Gene12 and Gene6
+Gene5 = Gene14 and Gene6
+Gene6 = Gene6
+Gene7 = Gene12 and Gene7 or Gene7 and Gene8
+Gene12 = Gene12
+Gene13 = Gene13 or not Gene16 or not Gene6
+Gene10 = Gene16 and Gene6 and Gene9
+Gene11 = Gene11 and Gene16 and not Gene6
+Gene16 = not Gene12 and Gene16 or not Gene12 and not Gene8 or Gene16 and not Gene8
+Gene14 = Gene14 and not Gene15 or Gene14 and Gene5 or not Gene15 and not Gene5
+Gene15 = Gene15

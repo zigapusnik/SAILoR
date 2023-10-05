@@ -1,0 +1,2 @@
+Gene37 = Gene11 and not Gene19
+Gene46 = not Gene30 or not Gene20 and not Gene60

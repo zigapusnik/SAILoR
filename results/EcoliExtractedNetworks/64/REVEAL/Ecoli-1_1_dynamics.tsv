@@ -1,0 +1,2 @@
+Gene37 = not Gene19 and not Gene57
+Gene5 = Gene8 or not Gene55

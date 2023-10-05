@@ -1,0 +1,2 @@
+Gene15 = Gene14 and Gene15 or Gene14 and not Gene6 or Gene15 and not Gene6
+Gene7 = Gene7

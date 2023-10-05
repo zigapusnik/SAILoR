@@ -1,0 +1,5 @@
+Gene12 = Gene12 or Gene2 and not Gene29
+Gene15 = not Gene17 or not Gene28 and not Gene29
+Gene4 = Gene4 or not Gene27
+Gene17 = Gene17 and not Gene2 or Gene17 and Gene29
+Gene31 = not Gene10 and Gene31

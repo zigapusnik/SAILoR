@@ -1,0 +1,4 @@
+Gene63 = Gene41 and Gene62
+Gene37 = Gene11 and not Gene19
+Gene4 = not Gene2 and not Gene42 or not Gene2 and not Gene47
+Gene46 = not Gene30 or not Gene20 and not Gene53

@@ -1,0 +1,4 @@
+Gene29 = not Gene27
+Gene27 = Gene2 or Gene18
+Gene21 = not Gene15 and Gene2 or Gene15 and Gene21 or Gene2 and Gene21
+Gene6 = Gene2 or Gene18

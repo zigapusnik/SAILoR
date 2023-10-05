@@ -1,0 +1,2 @@
+Gene35 = Gene35 and not Gene41 or Gene35 and Gene8 or Gene41 and Gene8
+Gene24 = Gene2 and Gene22 and not Gene42

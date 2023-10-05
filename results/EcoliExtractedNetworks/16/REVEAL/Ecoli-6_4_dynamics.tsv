@@ -1,0 +1,2 @@
+Gene4 = Gene4
+Gene5 = Gene4 and Gene5 or Gene5 and not Gene8

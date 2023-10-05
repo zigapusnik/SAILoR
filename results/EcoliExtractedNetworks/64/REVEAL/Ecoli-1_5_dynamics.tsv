@@ -1,0 +1,4 @@
+Gene23 = not Gene14 and Gene59 and Gene6
+Gene37 = not Gene19 and not Gene60
+Gene43 = not Gene25 and Gene30 or Gene25 and not Gene49 or Gene30 and not Gene49
+Gene46 = not Gene30 or not Gene20 and not Gene60

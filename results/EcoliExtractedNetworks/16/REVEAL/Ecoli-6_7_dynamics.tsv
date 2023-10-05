@@ -1,0 +1,2 @@
+Gene1 = Gene15 or Gene1
+Gene6 = Gene6 and not Gene9

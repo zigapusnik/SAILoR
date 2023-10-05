@@ -1,0 +1,2 @@
+Gene13 = Gene14 and not Gene15 or Gene14 and Gene3
+Gene16 = not Gene14 and not Gene7 and Gene8

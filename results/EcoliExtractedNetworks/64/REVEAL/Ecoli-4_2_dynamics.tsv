@@ -1,0 +1,2 @@
+Gene44 = not Gene10 and Gene32 or Gene10 and Gene44 or Gene32 and Gene44
+Gene32 = not Gene16 and Gene31 and Gene60 or Gene16 and Gene31 and not Gene60
