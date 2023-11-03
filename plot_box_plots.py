@@ -84,11 +84,11 @@ def main():
     net_nums = range(1, 11)         
     net_sizes = [16, 32, 64]        
         
-    all_subfolders = os.walk(os.path.join(".", "results", "results_18_07_2023"))     
-    subfolder_start = os.path.join(".", "results", "results_18_07_2023", subfolder + "_")  #EcoliExtractedNetworks_16obj2Weights_[0.3027 0.1308 0.5053 0.6698] # + "+ "[0.9923 0.2326 0.6033 0.3385]"   
+    all_subfolders = os.walk(os.path.join(".", "results", "results_static_improvements"))     
+    subfolder_start = os.path.join(".", "results", "results_static_improvements", subfolder + "_")  #EcoliExtractedNetworks_16obj2Weights_[0.3027 0.1308 0.5053 0.6698] # + "+ "[0.9923 0.2326 0.6033 0.3385]"   
 
     combined_results = []
-    net_sizes_order = []
+    net_sizes_order = [] 
 
     metrics = ["Accuracy", "Precision", "Recall", "F1", "BM", "MCC"]  
 

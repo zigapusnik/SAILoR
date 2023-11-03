@@ -41,6 +41,7 @@ def inferBooleanNetwork(adjM, nNodes, bin_df, shift_bin_df, experiments_df, gene
         b_fun = (target, regulators, gT, bfun, bexpr, tT)            
         b_functions.append(b_fun)            
 
+    print("Boolean Network Inferred")  
     return b_functions      
 
 def inferBooleanFunction(regulatorsArray, target, bin_df, shift_bin_df, experiments_df, geneNames, qm, experiments):
@@ -517,12 +518,10 @@ class Network:
 
 
 class GeneticSolver:
-    #nNodes ... network size
     #nGen ... number of generations
     #nSub ... number of subjects - population size
     #cxP  ... crossover probability
     #mutP ... mutation probability - defined as a ratio of expected changes in adjacency matrix      
-    #indP ... independent probability of flipping an edge 
     #networkProperties ... network properties extracted from reference networks, expression data and user defined 
     #initialPop ... list containing modes to generate initial population 
     #initialPopProb ... mode probabilities for constructing initial generation    
@@ -876,25 +875,7 @@ class GeneticSolver:
 
     #mutate subject by addition or deletion of edges  
     def mutation(self, sub):     
-        adjM = sub.getAdjacencyMatrix()   
-
-        """   
-        #flip bits in adjacency matrix with predefined probability
-        mutationMatrix = (rndVals < self.mutM).astype(int)     
-        newAdjM = np.absolute(sub.getAdjacencyMatrix() - mutationMatrix) 
-        """       
-
-        """
-        #flip ones in ajdacency matrix with probability p1 and zeros with probability p2 to approximately preserve number of edges  
-        rndVals = np.random.rand(self.nNodes, self.nNodes)
-        adjM = sub.getAdjacencyMatrix()  
-
-        indOnes = np.where(adjM == 1)   
-        indZeros = np.where(adjM == 0)   
-
-        adjM[indOnes] = (rndVals[indOnes] > self.p1).astype(int)         
-        adjM[indZeros] = (rndVals[indZeros] < self.p2).astype(int)    
-        """          
+        adjM = sub.getAdjacencyMatrix()           
 
         #add edge or remove edge with same probability 
         add_edge = True
@@ -1297,9 +1278,9 @@ class ContextSpecificDecoder:
 
         start = time.time() 
         iterableList = [(bNetwork, bin_df, experiments_df, self.geneNames, self.experiments, index) for index, bNetwork in enumerate(bNetworks)]    
-        pool = multiprocessing.Pool(multiprocessing.cpu_count())     
+        pool = multiprocessing.Pool(4) #(multiprocessing.cpu_count())     
         accuracies = pool.starmap(getDynamicAccuracy, iterableList)   
-        pool.close()      
+        pool.close()       
 
         bestAcc, bestInd = accuracies[0]  
         bestDist = distances[bestInd]       
@@ -1359,6 +1340,7 @@ class ContextSpecificDecoder:
         print("------------------------------------------------") 
 
         """
+        #sequential implementation 
         start = time.time()
         bestAcc, _ = getDynamicAccuracy(bNetworks[0], bin_df, experiments_df, self.geneNames, self.experiments, 0)     
         bestNetwork = bNetworks[0]   
@@ -1386,7 +1368,7 @@ class ContextSpecificDecoder:
         print("Inferring Boolean networks!")   
         start = time.time()
         iterableList = [(subject.adjM, nNodes, bin_df, shift_bin_df, experiments_df, self.geneNames, self.qm, self.experiments) for subject in subjects]        
-        pool = multiprocessing.Pool(multiprocessing.cpu_count() )     
+        pool = multiprocessing.Pool(4) #(multiprocessing.cpu_count() )     
         bNetworks = pool.starmap(inferBooleanNetwork, iterableList)  
         pool.close()         
         end = time.time()      
@@ -1395,6 +1377,7 @@ class ContextSpecificDecoder:
         
 
         """
+        #sequential implementation 
         bNetworks = []  
         i = 0 
         start = time.time() 

@@ -1,0 +1,92 @@
+Function	GeneID
+
+regulation of egg-laying behavior	FBgn0250832
+regulation of egg-laying behavior	FBgn0033153
+regulation of egg-laying behavior	FBgn0001404
+regulation of egg-laying behavior	FBgn0267796
+regulation of egg-laying behavior	FBgn0047334
+regulation of egg-laying behavior	FBgn0003034
+regulation of egg-laying behavior	FBgn0001247
+regulation of egg-laying behavior	FBgn0000592
+regulation of egg-laying behavior	FBgn0029768
+
+
+egg-laying behavior	FBgn0250832
+egg-laying behavior	FBgn0005386
+egg-laying behavior	FBgn0001028
+egg-laying behavior	FBgn0061492
+egg-laying behavior	FBgn0020618
+egg-laying behavior	FBgn0011669
+egg-laying behavior	FBgn0015381
+egg-laying behavior	FBgn0050446
+egg-laying behavior	FBgn0011668
+egg-laying behavior	FBgn0011670
+egg-laying behavior	FBgn0052484
+
+negative regulation of female receptivity	FBgn0250832
+negative regulation of female receptivity	FBgn0053527
+negative regulation of female receptivity	FBgn0004490
+negative regulation of female receptivity	FBgn0003034
+negative regulation of female receptivity	FBgn0000015
+
+
+positive regulation of female receptivity	FBgn0262636
+positive regulation of female receptivity	FBgn0265577
+
+regulation of female receptivity	FBgn0060296
+regulation of female receptivity	FBgn0004795
+regulation of female receptivity	FBgn0264975
+regulation of female receptivity	FBgn0011669
+regulation of female receptivity	FBgn0086676
+regulation of female receptivity	FBgn0015381
+regulation of female receptivity	FBgn0086370
+regulation of female receptivity	FBgn0028424
+regulation of female receptivity	FBgn0011668
+regulation of female receptivity	FBgn0265487
+regulation of female receptivity	FBgn0034638
+regulation of female receptivity	FBgn0011670
+regulation of female receptivity	FBgn0011206 
+
+
+negative regulation of female receptivity, post-mating	FBgn0250832
+negative regulation of female receptivity, post-mating	FBgn0038842
+negative regulation of female receptivity, post-mating	FBgn0011694
+negative regulation of female receptivity, post-mating	FBgn0013953
+negative regulation of female receptivity, post-mating	FBgn0003034
+negative regulation of female receptivity, post-mating	FBgn0001404
+negative regulation of female receptivity, post-mating	FBgn0029769
+negative regulation of female receptivity, post-mating	FBgn0050488
+negative regulation of female receptivity, post-mating	FBgn0263597
+negative regulation of female receptivity, post-mating	FBgn0029768
+negative regulation of female receptivity, post-mating	FBgn0267327
+negative regulation of female receptivity, post-mating	FBgn0023415
+negative regulation of female receptivity, post-mating	FBgn0039599
+negative regulation of female receptivity, post-mating	FBgn0039598
+negative regulation of female receptivity, post-mating	FBgn0037036
+negative regulation of female receptivity, post-mating	FBgn0011559 
+
+
+regulation of female receptivity, post-mating	FBgn0250832
+regulation of female receptivity, post-mating	FBgn0039597
+regulation of female receptivity, post-mating	FBgn0040092
+regulation of female receptivity, post-mating	FBgn0065114
+regulation of female receptivity, post-mating	FBgn0086370
+regulation of female receptivity, post-mating	FBgn0040093
+regulation of female receptivity, post-mating	FBgn0003034
+regulation of female receptivity, post-mating	FBgn0000592
+regulation of female receptivity, post-mating	FBgn0250842
+
+
+circadian behavior	FBgn0036260
+circadian behavior	FBgn0027109
+circadian behavior	FBgn0003068
+circadian behavior	FBgn0030228
+circadian behavior	FBgn0003429
+circadian behavior	FBgn0002917
+circadian behavior	FBgn0260753
+circadian behavior	FBgn0025680
+circadian behavior	FBgn0014396
+
+circadian regulation of heart rate	FBgn0023094
+circadian regulation of heart rate	FBgn0023076
+circadian regulation of heart rate	FBgn0014396
