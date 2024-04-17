@@ -11,7 +11,7 @@ from functools import reduce
 from sklearn.cluster import KMeans 
 
 def iterativeKmeans(data, d=3):  
-	data = np.array(data)    
+	data = np.array(data)    		
 
 	while d > 0:  
 		data = np.reshape(data, (-1,1)) #reshape to array with one feature  
@@ -119,6 +119,26 @@ def evalBooleanModel(model_path, test_series):
 	erros = simulations.sub(test_series) 
 	return np.absolute(erros.to_numpy()).sum()    
 
+def evalLogBTFModel(model_path, test_series):     
+	coefficient_matrix = np.loadtxt(model_path, dtype='float', delimiter=' ')
+	rows, columns = test_series.shape  
+	simulations = np.zeros((rows, columns))    
+	simulations[0,:] = test_series.iloc[[0]].copy()    
+
+	zero_indices = np.where(~coefficient_matrix.any(axis=0))[0]       
+
+	for time_stamp in range(1, rows):    
+		prediciton = np.matmul(simulations[time_stamp-1,:], coefficient_matrix[1:,:]) + coefficient_matrix[0,:] #add thresholds  
+		prediciton[prediciton >= 0] = 1
+		prediciton[prediciton < 0] = 0 
+		simulations[time_stamp,:] = prediciton
+
+		#if entire column of coefficient matrix is zero keep previous value   
+		for i in zero_indices:
+			simulations[time_stamp,i] = simulations[time_stamp-1,i]       
+
+	errors = np.subtract(simulations, test_series.to_numpy())       
+	return np.absolute(errors).sum()              
 
 if __name__ == '__main__':  
 
@@ -127,9 +147,9 @@ if __name__ == '__main__':
 
 	organisms = ["EcoliExtractedNetworks"]   
 
-	methods = ["SAILoR"]                                                       
-	networkSize = 16                  
-	networkNum = 10                      
+	methods = ["SAILoR"]                                                              
+	networkSize = 64                    
+	networkNum = 10                       
      
 	for organism, method in itertools.product(organisms, methods):  
 		data_path = os.path.join(".", "data", organism, str(networkSize))   
@@ -177,7 +197,9 @@ if __name__ == '__main__':
 			print("Cross-validation iterations: " + str(crossIterations))         
 
 			if method == "GABNI":       	 
-				evalFunction = evalGabniModel  
+				evalFunction = evalGabniModel
+			elif method == "LogBTF":
+				evalFunction = evalLogBTFModel
 			else:
 				evalFunction = evalBooleanModel   
 			
@@ -201,12 +223,15 @@ if __name__ == '__main__':
 				test_series_bin = test_series_bin.reset_index(drop=True)     
 				      
 				infer_series = df.drop(drop_rows)     
-				infer_series = infer_series.reset_index(drop=True)   
+				infer_series = infer_series.reset_index(drop=True)
+				delta_t = infer_series["Time"][1] - infer_series["Time"][0]     
+				infer_series["Time"] = np.array([delta_t*k for k in range(infer_series["Time"].size)])      				   
 
 				infer_series_bin = bin_df.drop(drop_rows) 
 				infer_series_bin = infer_series_bin.reset_index(drop=True)   
 
-				print(test_series_bin.shape)      
+				print(test_series_bin.shape) 
+				print(infer_series_bin.shape)       
 				print(infer_series.shape)      
 	 
 				if method == "MIBNI": 
@@ -218,7 +243,12 @@ if __name__ == '__main__':
 					f = open("tmp_ATEN.txt", "w")   
 					infer_series_bin.to_csv(f, header=None, sep="\t", index=None) 
 					f.close()    
-					cmd = r"Rscript  implementations\ATEN\runAten.R" + " " + f.name + " " + dynamics_file          
+					cmd = r"Rscript  implementations\ATEN\runAten.R" + " " + f.name + " " + dynamics_file
+				elif method == "LogBTF":	
+					f = open("tmp_LogBTF.txt", "w")   
+					infer_series_bin.to_csv(f, header=None, sep="\t", index=None)  
+					f.close()   
+					cmd = r"Rscript " + os.path.join(".", "implementations", "LogBTF", "runLogBTF.R") + " \"" + f.name + "\" \"" + dynamics_file + "\""          
 				elif method == "BestFit": 
 					cmd = r"python2 implementations\BooleanModeling2post\BinInfer.py learn-method=BESTFIT solutions=1 iterations=1 verbose=2" + " input=\"" + infer_series_bin.to_csv(sep="\t", index=None) + "\" outputFile="+dynamics_file
 				elif method == "REVEAL": 
@@ -227,10 +257,10 @@ if __name__ == '__main__':
 				elif method == "SAILoR": 
 
 					#save to file if file does not exists 
-					if not os.path.exists(seriesPath): 
-						infer_series.to_csv(seriesPath, sep="\t", index=False)  
-					if not os.path.exists(seriesBinPath): 
-						infer_series_bin.to_csv(seriesBinPath, sep="\t", index=False)    
+					#if not os.path.exists(seriesPath): 
+					infer_series.to_csv(seriesPath, sep="\t", index=False)   
+					#if not os.path.exists(seriesBinPath): 
+					infer_series_bin.to_csv(seriesBinPath, sep="\t", index=False)     
 
 					cmd = "python SAILoR.py" + " --timeSeriesPath \"" + seriesPath  + "\" --binarisedPath \"" + seriesBinPath + "\" --referencePaths \"" + str(referencePaths) + "\" --outputFilePath \"" + dynamics_file + "\" --decimal ,"        
 				else:                  
@@ -240,7 +270,7 @@ if __name__ == '__main__':
 				try: 
 					print(cmd)
 					start = time.time()     
-					p = subprocess.call(cmd)        
+					p = subprocess.call(cmd, shell=True)          
 					end = time.time()  
 					elapsed = end - start    
 					errs = evalFunction(dynamics_file, test_series_bin)       
@@ -253,4 +283,4 @@ if __name__ == '__main__':
 				dynamic_errors.append(errs)       
 
 			rslt_df = pd.DataFrame(list(zip(execution_times, dynamic_errors)), columns=["time", "errors"])    
-			rslt_df.to_csv(results_file, index=False, sep="\t", float_format='%.2f')                  
+			rslt_df.to_csv(results_file, index=False, sep="\t", float_format='%.2f')                    

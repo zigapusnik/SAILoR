@@ -5,7 +5,7 @@ Sources:
 	- Reprogramming of regulatory network using expression uncovers sex-specific gene regulation in Drosophila, Wang et al., 2018 ->  Full female-fly network from matlab source 
 
 Datasets:
-	- Time Seres:
+	- Time Series:
 		- https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE198879
 
 	- Male & Female Reference Networks (Ranked interractions)

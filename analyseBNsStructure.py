@@ -179,6 +179,20 @@ def getStructure(BNfilePath, DNfilePath, getSign=False):
     with open(DNfilePath, "w+") as fileStructureHandle:     
         fileStructureHandle.writelines(lines)          
 
+def getStructureLogBTF(BNfilePath, DNfilePath): 
+    coefficient_matrix = np.loadtxt(BNfilePath, dtype='float', delimiter=' ')
+    coefficient_matrix = coefficient_matrix[1:,:] #ignore first row (thresholds)    
+    lines = []      
+
+    edges = np.transpose(np.nonzero(coefficient_matrix))     
+    for i in range(edges.shape[0]):
+        regNum = edges[i, 0] + 1 
+        targetGene = edges[i, 1] + 1
+        lines.append(str(targetGene) + " <- " + str(regNum) + "\n")      
+
+    with open(DNfilePath, "w+") as fileStructureHandle:      
+        fileStructureHandle.writelines(lines)      
+
 if __name__ == "__main__":  
     #set working directory
     os.chdir(os.path.dirname(__file__))         
@@ -186,8 +200,8 @@ if __name__ == "__main__":
     organism = "Ecoli"     
     results_name = "EcoliExtractedNetworks"
     data_folder = "EcoliExtractedNetworks"    
-    methods = ["SAILoR"]                    
-    networkSize = 64                                                                                
+    methods = ["SAILoR"]                      
+    networkSize = 16                                                                              
 
     for method in methods: 
         results_path = os.path.join(".", "results", results_name, str(networkSize), method) 
@@ -212,8 +226,11 @@ if __name__ == "__main__":
                         all_results[networkNum] = pd.DataFrame(columns = ["Accuracy", "Precision", "Recall", "F1", "MCC", "BM"])                   
 
                     if not os.path.exists(DNfilePath):      
-                        #convert Boolean network to directed graph and save structure       
-                        getStructure(BNfilePath, DNfilePath)  
+                        #convert Boolean network to directed graph and save structure      
+                        if method == "LogBTF":
+                            getStructureLogBTF(BNfilePath, DNfilePath) 
+                        else: 
+                            getStructure(BNfilePath, DNfilePath)  
 
                     #print(DNfilePath)
                     #print(timeSeriesFilePath)

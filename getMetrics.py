@@ -15,7 +15,7 @@ def show(fig):
     buf = io.BytesIO()
     pio.write_image(fig, buf)
     img = Image.open(buf)
-    img.show()    
+    img.show()         
 
 def plot_charts(organism, size_data_dict, save_path): #metrics, metrics_w_units                 
     br = "\n"   
@@ -115,11 +115,11 @@ def plot_charts(organism, size_data_dict, save_path): #metrics, metrics_w_units
 
     metric = "Time [s]"   
     num = len(methods)     
-    width = 0.15  # the width of the bars 
+    width = 0.13  # the width of the bars 
 
-    my_methods = ["BestFit", "SAILoR", "MIBNI", "GABNI", "REVEAL", "ATEN"]  
-    my_names = {"BestFit": "Best-Fit", "SAILoR": "SAILoR", "MIBNI": "MIBNI", "GABNI": "GABNI", "REVEAL": "REVEAL", "ATEN": "ATEN"}   
-    my_names_arr = ["Best-Fit", "Best-Fit", "Best-Fit", "SAILoR", "SAILoR", "SAILoR", "MIBNI", "MIBNI", "MIBNI", "GABNI", "GABNI", "GABNI", "REVEAL",  "REVEAL",  "REVEAL", "ATEN", "ATEN", "ATEN"]
+    my_methods = ["BestFit", "SAILoR", "MIBNI", "GABNI", "REVEAL", "ATEN", "LogBTF"]  
+    my_names = {"BestFit": "Best-Fit", "SAILoR": "SAILoR", "MIBNI": "MIBNI", "GABNI": "GABNI", "REVEAL": "REVEAL", "ATEN": "ATEN", "LogBTF": "LogBTF"}   
+    my_names_arr = ["Best-Fit", "Best-Fit", "Best-Fit", "SAILoR", "SAILoR", "SAILoR", "MIBNI", "MIBNI", "MIBNI", "GABNI", "GABNI", "GABNI", "REVEAL",  "REVEAL",  "REVEAL", "ATEN", "ATEN", "ATEN", "LogBTF", "LogBTF", "LogBTF"]
 
     for i, method in enumerate(my_methods): 
         x = [] 
@@ -166,7 +166,7 @@ if __name__ == '__main__':
     os.chdir(os.path.dirname(__file__))    
 
     organisms = ["EcoliExtractedNetworks"]               
-    methods = ["SAILoR", "BestFit", "GABNI", "MIBNI", "REVEAL", "ATEN"]         
+    methods = ["SAILoR", "BestFit", "GABNI", "MIBNI", "REVEAL", "ATEN", "LogBTF"]          
 
     networkSizes = [16, 32, 64]                  
     networkNum = 10         

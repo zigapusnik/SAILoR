@@ -57,7 +57,6 @@ def readResults(subfolder_name):
     with open(os.path.join(subfolder_name, "dump_results.pkl"), "rb") as file:  
         dstcs, mtrcs, base, imprvs = pickle.load(file)               
 
-
     imprvs_dict = {"Accuracy": [], "Precision": [], "Recall": [], "F1": [], "MCC": [], "BM": []}
     for net_num, imprv_list in imprvs.items():  
         #print(imprv_list)  
