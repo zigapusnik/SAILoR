@@ -187,7 +187,7 @@ if __name__ == '__main__':
 				bin_df = df[new_columns].apply(iterativeKmeans, axis=0)   
 				bin_df.to_csv(binarized_file, index=False, sep="\t", header=None)              
 
-			bin_df = pd.read_csv(binarized_file, sep="\t", header=None)  
+			bin_df = pd.read_csv(binarized_file, sep="\t", header=None)    
 
 			rows, columns = df.shape     
 			seriesSize = rows      
