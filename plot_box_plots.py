@@ -6,8 +6,31 @@ import os
 import pandas as pd
 import pickle    
 import re     
+import scipy.stats as stats
 
 from scipy.interpolate import interp2d
+
+
+
+def getSignificance(all_data, net_sizes, metrics):
+    for metric in metrics:
+
+        data = [x[metric] for x in all_data]
+        data_16 = data[0]
+        data_32 = data[1]
+        data_64 = data[2] 
+        print(metric)
+
+        print("16")
+        _, p_value = stats.wilcoxon(data_16)
+        print( p_value )
+        print("32")
+        _, p_value = stats.wilcoxon(data_32)
+        print( p_value )
+        print("64")
+        _, p_value = stats.wilcoxon(data_64)
+        print( p_value )  
+
 
 def plotBoxPlots(all_data, net_sizes, metrics):  
 
@@ -23,6 +46,10 @@ def plotBoxPlots(all_data, net_sizes, metrics):
         k = i%3
 
         plot_data = [x[metric] for x in all_data]
+
+        print(metric)
+        print(len(plot_data)) 
+        print(plot_data[0])  
 
         bp = axs[j][k].boxplot(plot_data, widths=0.6)    
         
@@ -107,7 +134,8 @@ def main():
         indices = np.argsort(net_sizes_order)
         combined_results = list(np.array(combined_results)[indices]) 
 
-    plotBoxPlots(combined_results, net_sizes, metrics)          
+    plotBoxPlots(combined_results, net_sizes, metrics)      
+    getSignificance(combined_results, net_sizes, metrics)     
 
 if __name__ == "__main__":      
     main()           
